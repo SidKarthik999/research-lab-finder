@@ -1,18 +1,26 @@
 # Research Lab Finder
 
-A full-stack web application that helps students discover research laboratories based on research interests, institutions, and geographic location.
+A platform for discovering academic research labs based on research interests, location, institutions, and publications.
 
-## Planned Features
+## Current Progress
 
-- Search research labs by topic
-- View recent publications
-- Display principal investigators
-- Generate AI-assisted cold emails
-- Continuously update publication database
+- PostgreSQL database created
+- Relational schema designed
+- Seed data added
+- Basic SQL queries tested
 
-## Tech Stack
+## Database
 
-- PostgreSQL
-- Python (FastAPI)
-- React / Next.js
-- OpenAI API
+Main entities:
+- Institutions
+- Departments
+- Professors
+- Labs
+- Publications
+- Research Topics
+
+## Future Goals
+
+- Automatically ingest lab and publication data
+- Build search backend
+- Integrate LLMs for lab summaries and cold email generation
