@@ -1,5 +1,8 @@
--- Institutions
+-- Development seed data only.
+-- This dataset is for testing schema relationships and queries.
+-- It is not intended to represent real research records.
 
+-- Institutions
 INSERT INTO Institution (name, website, city, state, country, source) VALUES
 ('Massachusetts Institute of Technology', 'https://www.mit.edu/', 'Cambridge', 'MA', 'USA', 'manual'),
 ('Stanford University', 'https://www.stanford.edu/', 'Stanford', 'CA', 'USA', 'manual'),
