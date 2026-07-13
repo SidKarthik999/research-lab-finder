@@ -1,0 +1,39 @@
+name: researchlabfinder
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - bzip2=1.0.8
+  - ca-certificates=2026.6.17
+  - cyrus-sasl=2.1.28
+  - icu=78.3
+  - krb5=1.22.2
+  - libcxx=22.1.2
+  - libedit=3.1.20250104
+  - libexpat=2.8.2
+  - libffi=3.4.8
+  - liblzma=5.8.2
+  - libntlm=1.8
+  - libpq=18.4
+  - libsqlite=3.53.3
+  - libzlib=1.3.2
+  - ncurses=6.5
+  - openldap=2.6.13
+  - openssl=3.6.3
+  - packaging=26.0
+  - pip=26.1.2
+  - psycopg=3.3.4
+  - psycopg-c=3.3.4
+  - python=3.12.12
+  - python_abi=3.12
+  - readline=8.3
+  - setuptools=82.0.1
+  - sqlite=3.53.2
+  - tk=8.6.15
+  - typing-extensions=4.16.0
+  - typing_extensions=4.16.0
+  - tzdata=2026b
+  - wheel=0.47.0
+  - xz=5.8.2
+  - zlib=1.3.2
+prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder
