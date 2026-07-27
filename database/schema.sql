@@ -4,10 +4,12 @@ CREATE TABLE Institution (
     website TEXT,
     city TEXT,
     state TEXT,
-    country TEXT,
+    country_code TEXT,
     source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    openalex_id TEXT UNIQUE,
+    ror_id TEXT UNIQUE
 );
 
 CREATE TABLE Department (
@@ -32,7 +34,8 @@ CREATE TABLE Professor (
     website TEXT,
     source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    openalex_id TEXT UNIQUE
 );
 
 CREATE TABLE Lab (
@@ -62,11 +65,12 @@ CREATE TABLE Publication (
     abstract TEXT,
     publication_date DATE,
     journal TEXT,
-    DOI TEXT UNIQUE,
+    doi TEXT UNIQUE,
     url TEXT,
     source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    openalex_id TEXT UNIQUE
 );
 
 CREATE TABLE ResearchTopic (

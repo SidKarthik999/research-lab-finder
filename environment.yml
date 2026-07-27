@@ -3,10 +3,15 @@ channels:
   - defaults
   - conda-forge
 dependencies:
+  - brotlicffi=1.2.0.0
   - bzip2=1.0.8
-  - ca-certificates=2026.6.17
+  - ca-certificates=2026.7.16
+  - certifi=2026.6.17
+  - cffi=2.1.0
+  - charset-normalizer=3.4.7
   - cyrus-sasl=2.1.28
   - icu=78.3
+  - idna=3.18
   - krb5=1.22.2
   - libcxx=22.1.2
   - libedit=3.1.20250104
@@ -24,16 +29,23 @@ dependencies:
   - pip=26.1.2
   - psycopg=3.3.4
   - psycopg-c=3.3.4
+  - pycparser=3.0
+  - pysocks=1.7.1
   - python=3.12.12
   - python_abi=3.12
   - readline=8.3
+  - requests=2.34.2
   - setuptools=82.0.1
   - sqlite=3.53.2
   - tk=8.6.15
   - typing-extensions=4.16.0
   - typing_extensions=4.16.0
   - tzdata=2026b
+  - urllib3=2.7.0
   - wheel=0.47.0
   - xz=5.8.2
   - zlib=1.3.2
+  - pip:
+      - pyalex==0.21
+      - python-dotenv==1.2.2
 prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder
