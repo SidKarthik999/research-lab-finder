@@ -38,7 +38,12 @@ def ingest_institutions_from_file(filename):
     for institution_name in institutions:
         institution_name = institution_name.strip()
 
-        if institution_name:
-            insert_openalex_institution(institution_name)
+        if not institution_name:
+            continue
+        try:
+            institution_id = insert_openalex_institution(institution_name)
+            print(f"Inserted {institution_name}: {institution_id}")
 
+        except Exception as e:
+            print(f"Failed {institution_name}: {e}")
 ingest_institutions_from_file("data/institutions.txt")
