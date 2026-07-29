@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 import pyalex
 import pprint
-from src.database import insert_institution
+from src.database import insert_institution, insert_professor
 
 load_dotenv()
 
@@ -31,7 +31,7 @@ def insert_openalex_institution(institution_name):
     )
     return institution_id
 
-def ingest_institutions_from_file(filename):
+def insert_institutions_from_file(filename):
     with open(filename, "r") as file:
         institutions = file.readlines()
 
@@ -46,4 +46,42 @@ def ingest_institutions_from_file(filename):
 
         except Exception as e:
             print(f"Failed {institution_name}: {e}")
-ingest_institutions_from_file("data/institutions.txt")
+
+def get_openalex_works(institution_name):
+    institution = search_institution(institution_name)
+
+    if institution is None:
+        return []
+
+    institution_id = institution["id"]
+    works = (
+        pyalex.Works()
+        .filter(institutions={"id": institution_id})
+        .get(per_page=25)
+    )
+    return works
+
+def insert_openalex_professor(author):
+    professor_id = insert_professor(
+        name=author['author']['display_name'],
+        orcid=author['author']['orcid'],
+        openalex_id=author['author']['id'],
+        source="OpenAlex"
+    )
+    return professor_id
+
+def insert_professors_from_institution(institution_name):
+    works = get_openalex_works(institution_name)
+    professors_inserted = 0
+    for work in works:
+        for author in work['authorships']:
+            professor_id = insert_openalex_professor(author)
+            print(f"Inserted {author['author']['display_name']}: {professor_id}")
+            professors_inserted += 1
+
+    return professors_inserted
+
+if __name__  == "__main__":
+    insert_openalex_institution("Carnegie Mellon University")
+    count = insert_professors_from_institution("Carnegie Mellon University")
+    print(f"Inserted {count} professors")

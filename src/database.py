@@ -90,3 +90,29 @@ def insert_institution(name, website=None, city=None, state=None, country_code=N
     cursor.close()
     connection.close()
     return institution_id
+
+
+def insert_professor(name, email=None, orcid=None, website=None, source=None, openalex_id=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO Professor (
+        name,
+        email,
+        orcid,
+        website,
+        openalex_id,
+        source
+    )
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (openalex_id)
+    DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query,(name, email, orcid, website, openalex_id, source))
+    professor_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return professor_id
