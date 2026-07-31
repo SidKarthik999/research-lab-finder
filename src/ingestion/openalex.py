@@ -60,7 +60,7 @@ def get_openalex_works(institution_name):
     works = (
         pyalex.Works()
         .filter(institutions={"id": institution_id})
-        .get(per_page=1)
+        .get(per_page=200)
     )
     return works
 
