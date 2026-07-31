@@ -25,6 +25,15 @@ def search_institution(institution_name):
         return results[0]
     return None
 
+def get_top_us_institutions(limit=100):
+    institutions = (
+        pyalex.Institutions()
+        .filter(country_code="US", type="education")
+        .sort(works_count="desc")
+        .get(per_page=limit)
+    )
+    return [institution["display_name"] for institution in institutions]
+
 def insert_openalex_institution(institution_name):
     institution = search_institution(institution_name=institution_name)
     if institution is None:
@@ -165,8 +174,7 @@ def reconstruct_abstract(abstract_inverted_index):
     return " ".join(abstract_words)
 
 if __name__  == "__main__":
-    with open("data/institutions.txt", "r") as file:
-        institution_names = [line.strip() for line in file if line.strip()]
+    institution_names = get_top_us_institutions(100)
 
     for institution_name in institution_names:
         try:
