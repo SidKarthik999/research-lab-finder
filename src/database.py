@@ -1,4 +1,5 @@
 import psycopg
+from psycopg.errors import UniqueViolation
 
 _connection = None
 
@@ -119,8 +120,31 @@ def insert_professor(name, email=None, orcid=None, website=None, source=None, op
         updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
-    cursor.execute(query,(name, email, orcid, website, openalex_id, source))
-    professor_id = cursor.fetchone()[0]
+    try:
+        cursor.execute(query,(name, email, orcid, website, openalex_id, source))
+        professor_id = cursor.fetchone()[0]
+    except UniqueViolation:
+        cursor.close()
+        return merge_professor_by_orcid(orcid, email, website)
+
+    connection.commit()
+    cursor.close()
+    return professor_id
+
+def merge_professor_by_orcid(orcid, email=None, website=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET website = COALESCE(%s, website),
+        email = COALESCE(%s, email),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE orcid = %s
+    RETURNING id;
+    '''
+    cursor.execute(query,(website, email, orcid))
+    row = cursor.fetchone()
+    professor_id = row[0] if row else None
     connection.commit()
     cursor.close()
     return professor_id
