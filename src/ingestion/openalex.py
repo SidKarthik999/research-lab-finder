@@ -34,10 +34,7 @@ def get_top_us_institutions(limit=100):
     )
     return [institution["display_name"] for institution in institutions]
 
-def insert_openalex_institution(institution_name):
-    institution = search_institution(institution_name=institution_name)
-    if institution is None:
-        return None
+def insert_openalex_institution(institution):
     institution_id = insert_institution(
         name = institution['display_name'],
         website = institution.get('homepage_url'),
@@ -50,16 +47,10 @@ def insert_openalex_institution(institution_name):
     )
     return institution_id
 
-def get_openalex_works(institution_name):
-    institution = search_institution(institution_name)
-
-    if institution is None:
-        return []
-
-    institution_id = institution["id"]
+def get_openalex_works(openalex_institution_id):
     works = (
         pyalex.Works()
-        .filter(institutions={"id": institution_id})
+        .filter(institutions={"id": openalex_institution_id})
         .get(per_page=200)
     )
     return works
@@ -72,21 +63,6 @@ def insert_openalex_professor(author):
         source="OpenAlex"
     )
     return professor_id
-
-def insert_professors_from_institution(institution_name):
-    works = get_openalex_works(institution_name)
-    professors_inserted = 0
-    for work in works:
-        for author in work['authorships']:
-            try:
-                professor_id = insert_openalex_professor(author)
-                print(f"Inserted {author['author']['display_name']}: {professor_id}")
-                professors_inserted += 1
-
-            except Exception as e:
-                print(f"Failed {author['author']['display_name']}: {e}")
-
-    return professors_inserted
 
 def insert_openalex_publication(work):
     primary_location = work.get('primary_location') or {}
@@ -120,8 +96,7 @@ def insert_openalex_lab(professor_id, professor_name):
     insert_professor_lab(professor_id, lab_id)
     return lab_id
 
-def insert_publications_from_institution(institution_name):
-    works = get_openalex_works(institution_name)
+def insert_publications_from_institution(works):
     publications_inserted = 0
     for work in works:
         publication_id = insert_openalex_publication(work)
@@ -152,11 +127,16 @@ def insert_publications_from_institution(institution_name):
     return publications_inserted
 
 def ingest_institution(institution_name):
-    institution_id = insert_openalex_institution(institution_name)
+    institution = search_institution(institution_name)
+    if institution is None:
+        print(f"Failed {institution_name}: not found in OpenAlex")
+        return None
+
+    institution_id = insert_openalex_institution(institution)
     print(f"Inserted {institution_name}: {institution_id}")
 
-    insert_professors_from_institution(institution_name)
-    insert_publications_from_institution(institution_name)
+    works = get_openalex_works(institution["id"])
+    insert_publications_from_institution(works)
 
     return institution_id
 
