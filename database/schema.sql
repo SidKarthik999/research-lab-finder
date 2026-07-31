@@ -46,7 +46,7 @@ CREATE TABLE Lab (
     city TEXT,
     state TEXT,
     country TEXT,
-    department_id INTEGER NOT NULL,
+    department_id INTEGER,
     pi_professor_id INTEGER,
     source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

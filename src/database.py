@@ -236,7 +236,7 @@ def insert_department(name, institution_id, source=None):
     connection.close()
     return department_id
 
-def insert_lab(name, department_id, pi_professor_id=None, website=None, description=None, source=None):
+def insert_lab(name, department_id=None, pi_professor_id=None, website=None, description=None, source=None):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''

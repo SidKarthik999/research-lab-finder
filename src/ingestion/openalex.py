@@ -9,9 +9,7 @@ from src.database import (
     insert_research_topic,
     insert_professor_publication,
     insert_publication_topic,
-    insert_department,
     insert_lab,
-    insert_professor_department,
     insert_professor_lab,
     insert_lab_research_topic,
 )
@@ -104,48 +102,16 @@ def insert_openalex_topic(topic):
     )
     return topic_id
 
-def get_department_name_for_author(author_id):
-    try:
-        author = pyalex.Authors()[author_id]
-    except Exception:
-        return "General"
-
-    topics = author.get('topics') or []
-    if not topics:
-        return "General"
-
-    top_topic = topics[0]
-    subfield_name = (top_topic.get('subfield') or {}).get('display_name')
-    if subfield_name:
-        return subfield_name
-
-    field_name = (top_topic.get('field') or {}).get('display_name')
-    if field_name:
-        return field_name
-
-    return "General"
-
-def insert_openalex_department(author_id, institution_id):
-    department_name = get_department_name_for_author(author_id)
-    department_id = insert_department(
-        name=department_name,
-        institution_id=institution_id,
-        source="OpenAlex-derived"
-    )
-    return department_id
-
-def insert_openalex_lab(professor_id, professor_name, department_id):
+def insert_openalex_lab(professor_id, professor_name):
     lab_id = insert_lab(
         name=f"{professor_name} Lab",
-        department_id=department_id,
         pi_professor_id=professor_id,
         source="OpenAlex-derived"
     )
     insert_professor_lab(professor_id, lab_id)
-    insert_professor_department(professor_id, department_id)
     return lab_id
 
-def insert_publications_from_institution(institution_name, institution_id):
+def insert_publications_from_institution(institution_name):
     works = get_openalex_works(institution_name)
     publications_inserted = 0
     for work in works:
@@ -158,8 +124,7 @@ def insert_publications_from_institution(institution_name, institution_id):
                 professor_id = insert_openalex_professor(author)
                 insert_professor_publication(professor_id, publication_id)
 
-                department_id = insert_openalex_department(author['author']['id'], institution_id)
-                lab_id = insert_openalex_lab(professor_id, author['author']['display_name'], department_id)
+                lab_id = insert_openalex_lab(professor_id, author['author']['display_name'])
 
                 for topic in work.get('topics', []):
                     insert_lab_research_topic(lab_id, insert_openalex_topic(topic))
@@ -182,7 +147,7 @@ def ingest_institution(institution_name):
     print(f"Inserted {institution_name}: {institution_id}")
 
     insert_professors_from_institution(institution_name)
-    insert_publications_from_institution(institution_name, institution_id)
+    insert_publications_from_institution(institution_name)
 
     return institution_id
 
