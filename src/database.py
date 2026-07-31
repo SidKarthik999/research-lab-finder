@@ -1,10 +1,22 @@
 import psycopg
+
+_connection = None
+
 def get_connection():
-    connection = psycopg.connect(
-        dbname='research_lab_finder',
-        user='siddanthkarthik'
-    )
-    return connection
+    global _connection
+    if _connection is None or _connection.closed:
+        _connection = psycopg.connect(
+            dbname='research_lab_finder',
+            user='siddanthkarthik',
+            autocommit=True
+        )
+    return _connection
+
+def close_connection():
+    global _connection
+    if _connection is not None and not _connection.closed:
+        _connection.close()
+    _connection = None
 
 def get_all_institutions():
     connection = get_connection()
@@ -16,7 +28,6 @@ def get_all_institutions():
     cursor.execute(query)
     institutions = cursor.fetchall()
     cursor.close()
-    connection.close()
     return institutions
 
 def get_all_labs():
@@ -29,7 +40,6 @@ def get_all_labs():
     cursor.execute(query)
     labs = cursor.fetchall()
     cursor.close()
-    connection.close()
     return labs
 
 def get_labs_at_institution(institution_name):
@@ -45,7 +55,6 @@ def get_labs_at_institution(institution_name):
     cursor.execute(query, (institution_name,))
     labs = cursor.fetchall()
     cursor.close()
-    connection.close()
     return labs
 
 def get_labs_by_topic(topic_name):
@@ -61,7 +70,6 @@ def get_labs_by_topic(topic_name):
     cursor.execute(query, (topic_name,))
     labs = cursor.fetchall()
     cursor.close()
-    connection.close()
     return labs
 
 def insert_institution(name, website=None, city=None, state=None, country_code=None, openalex_id=None, ror_id=None, source=None):
@@ -88,7 +96,6 @@ def insert_institution(name, website=None, city=None, state=None, country_code=N
     institution_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return institution_id
 
 
@@ -116,7 +123,6 @@ def insert_professor(name, email=None, orcid=None, website=None, source=None, op
     professor_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return professor_id
 
 def insert_publication(title, abstract=None, publication_date=None, journal=None, doi=None, url=None, source=None, openalex_id=None):
@@ -143,7 +149,6 @@ def insert_publication(title, abstract=None, publication_date=None, journal=None
     publication_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return publication_id
 
 def insert_research_topic(name, source=None):
@@ -164,7 +169,6 @@ def insert_research_topic(name, source=None):
     topic_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return topic_id
 
 def insert_professor_publication(professor_id, publication_id):
@@ -182,7 +186,6 @@ def insert_professor_publication(professor_id, publication_id):
     cursor.execute(query,(professor_id, publication_id))
     connection.commit()
     cursor.close()
-    connection.close()
 
 def insert_publication_topic(publication_id, topic_id):
     connection = get_connection()
@@ -199,7 +202,6 @@ def insert_publication_topic(publication_id, topic_id):
     cursor.execute(query,(publication_id, topic_id))
     connection.commit()
     cursor.close()
-    connection.close()
 
 def get_all_professors():
     connection = get_connection()
@@ -211,7 +213,6 @@ def get_all_professors():
     cursor.execute(query)
     professors = cursor.fetchall()
     cursor.close()
-    connection.close()
     return professors
 
 def insert_department(name, institution_id, source=None):
@@ -233,7 +234,6 @@ def insert_department(name, institution_id, source=None):
     department_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return department_id
 
 def insert_lab(name, department_id=None, pi_professor_id=None, website=None, description=None, source=None):
@@ -260,7 +260,6 @@ def insert_lab(name, department_id=None, pi_professor_id=None, website=None, des
     lab_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    connection.close()
     return lab_id
 
 def update_lab_contact(pi_professor_id, name=None, website=None, description=None):
@@ -280,7 +279,6 @@ def update_lab_contact(pi_professor_id, name=None, website=None, description=Non
     lab_id = row[0] if row else None
     connection.commit()
     cursor.close()
-    connection.close()
     return lab_id
 
 def insert_professor_department(professor_id, department_id):
@@ -298,7 +296,6 @@ def insert_professor_department(professor_id, department_id):
     cursor.execute(query,(professor_id, department_id))
     connection.commit()
     cursor.close()
-    connection.close()
 
 def insert_professor_lab(professor_id, lab_id):
     connection = get_connection()
@@ -315,7 +312,6 @@ def insert_professor_lab(professor_id, lab_id):
     cursor.execute(query,(professor_id, lab_id))
     connection.commit()
     cursor.close()
-    connection.close()
 
 def insert_lab_research_topic(lab_id, topic_id):
     connection = get_connection()
@@ -332,4 +328,3 @@ def insert_lab_research_topic(lab_id, topic_id):
     cursor.execute(query,(lab_id, topic_id))
     connection.commit()
     cursor.close()
-    connection.close()

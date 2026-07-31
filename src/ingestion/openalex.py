@@ -12,6 +12,7 @@ from src.database import (
     insert_lab,
     insert_professor_lab,
     insert_lab_research_topic,
+    close_connection,
 )
 
 load_dotenv()
@@ -162,3 +163,5 @@ if __name__  == "__main__":
 
         except Exception as e:
             print(f"Failed {institution_name}: {e}")
+
+    close_connection()

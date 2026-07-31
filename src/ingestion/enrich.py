@@ -1,7 +1,7 @@
 import re
 import time
 import requests
-from src.database import get_all_professors, insert_professor, update_lab_contact
+from src.database import get_all_professors, insert_professor, update_lab_contact, close_connection
 
 ORCID_API_BASE = "https://pub.orcid.org/v3.0"
 USER_AGENT = "researchlabfinder-bot (contact: sanjanakarthik789@gmail.com)"
@@ -121,3 +121,4 @@ def enrich_all_professors():
 
 if __name__ == "__main__":
     enrich_all_professors()
+    close_connection()
