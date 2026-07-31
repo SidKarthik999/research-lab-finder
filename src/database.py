@@ -116,3 +116,86 @@ def insert_professor(name, email=None, orcid=None, website=None, source=None, op
     cursor.close()
     connection.close()
     return professor_id
+
+def insert_publication(title, abstract=None, publication_date=None, journal=None, doi=None, url=None, source=None, openalex_id=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO Publication (
+        title,
+        abstract,
+        publication_date,
+        journal,
+        doi,
+        url,
+        openalex_id,
+        source
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (openalex_id)
+    DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query,(title, abstract, publication_date, journal, doi, url, openalex_id, source))
+    publication_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return publication_id
+
+def insert_research_topic(name, source=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ResearchTopic (
+        name,
+        source
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (name)
+    DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query,(name, source))
+    topic_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return topic_id
+
+def insert_professor_publication(professor_id, publication_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ProfessorPublication (
+        professor_id,
+        publication_id
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (professor_id, publication_id)
+    DO NOTHING;
+    '''
+    cursor.execute(query,(professor_id, publication_id))
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+def insert_publication_topic(publication_id, topic_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO PublicationTopic (
+        publication_id,
+        topic_id
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (publication_id, topic_id)
+    DO NOTHING;
+    '''
+    cursor.execute(query,(publication_id, topic_id))
+    connection.commit()
+    cursor.close()
+    connection.close()
+

@@ -2,7 +2,14 @@ from dotenv import load_dotenv
 import os
 import pyalex
 import pprint
-from src.database import insert_institution, insert_professor
+from src.database import (
+    insert_institution,
+    insert_professor,
+    insert_publication,
+    insert_research_topic,
+    insert_professor_publication,
+    insert_publication_topic,
+)
 
 load_dotenv()
 
@@ -57,7 +64,7 @@ def get_openalex_works(institution_name):
     works = (
         pyalex.Works()
         .filter(institutions={"id": institution_id})
-        .get(per_page=25)
+        .get(per_page=1)
     )
     return works
 
@@ -75,13 +82,85 @@ def insert_professors_from_institution(institution_name):
     professors_inserted = 0
     for work in works:
         for author in work['authorships']:
-            professor_id = insert_openalex_professor(author)
-            print(f"Inserted {author['author']['display_name']}: {professor_id}")
-            professors_inserted += 1
+            try:
+                professor_id = insert_openalex_professor(author)
+                print(f"Inserted {author['author']['display_name']}: {professor_id}")
+                professors_inserted += 1
+
+            except Exception as e:
+                print(f"Failed {author['author']['display_name']}: {e}")
 
     return professors_inserted
 
+def insert_openalex_publication(work):
+    primary_location = work.get('primary_location') or {}
+    source_info = primary_location.get('source') or {}
+    abstract_inverted_index = work.get('abstract_inverted_index')
+    publication_id = insert_publication(
+        title=work.get('display_name'),
+        abstract=reconstruct_abstract(abstract_inverted_index) if abstract_inverted_index else None,
+        publication_date=work.get('publication_date'),
+        journal=source_info.get('display_name'),
+        doi=work['ids'].get('doi'),
+        url=primary_location.get('landing_page_url'),
+        openalex_id=work['id'],
+        source="OpenAlex"
+    )
+    return publication_id
+
+def insert_openalex_topic(topic):
+    topic_id = insert_research_topic(
+        name=topic['display_name'],
+        source="OpenAlex"
+    )
+    return topic_id
+
+def insert_publications_from_institution(institution_name):
+    works = get_openalex_works(institution_name)
+    publications_inserted = 0
+    for work in works:
+        publication_id = insert_openalex_publication(work)
+        print(f"Inserted {work['display_name']}: {publication_id}")
+        publications_inserted += 1
+
+        for author in work['authorships']:
+            try:
+                professor_id = insert_openalex_professor(author)
+                insert_professor_publication(professor_id, publication_id)
+
+            except Exception as e:
+                print(f"Failed {author['author']['display_name']}: {e}")
+
+        for topic in work.get('topics', []):
+            try:
+                topic_id = insert_openalex_topic(topic)
+                insert_publication_topic(publication_id, topic_id)
+
+            except Exception as e:
+                print(f"Failed {topic['display_name']}: {e}")
+
+    return publications_inserted
+
+def reconstruct_abstract(abstract_inverted_index):
+    max_position = max(
+        position
+        for positions in abstract_inverted_index.values()
+        for position in positions
+    )
+    abstract_words = [""] * (max_position + 1)
+    for word, positions in abstract_inverted_index.items():
+        for position in positions:
+            abstract_words[position] = word
+
+    return " ".join(abstract_words)
+
 if __name__  == "__main__":
-    insert_openalex_institution("Carnegie Mellon University")
-    count = insert_professors_from_institution("Carnegie Mellon University")
-    print(f"Inserted {count} professors")
+    # Full OpenAlex ingestion intake, in order:
+    insert_institutions_from_file("data/institutions.txt")
+
+    with open("data/institutions.txt", "r") as file:
+        institution_names = [line.strip() for line in file if line.strip()]
+
+    for institution_name in institution_names:
+        insert_professors_from_institution(institution_name)
+        insert_publications_from_institution(institution_name)
