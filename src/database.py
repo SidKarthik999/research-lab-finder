@@ -107,6 +107,8 @@ def insert_professor(name, email=None, orcid=None, website=None, source=None, op
     VALUES (%s, %s, %s, %s, %s, %s)
     ON CONFLICT (openalex_id)
     DO UPDATE SET
+        website = COALESCE(EXCLUDED.website, Professor.website),
+        email = COALESCE(EXCLUDED.email, Professor.email),
         updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
@@ -199,3 +201,135 @@ def insert_publication_topic(publication_id, topic_id):
     cursor.close()
     connection.close()
 
+def get_all_professors():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT *
+    FROM Professor
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    return professors
+
+def insert_department(name, institution_id, source=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO Department (
+        name,
+        institution_id,
+        source
+    )
+    VALUES (%s, %s, %s)
+    ON CONFLICT (name, institution_id)
+    DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query,(name, institution_id, source))
+    department_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return department_id
+
+def insert_lab(name, department_id, pi_professor_id=None, website=None, description=None, source=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO Lab (
+        name,
+        department_id,
+        pi_professor_id,
+        website,
+        description,
+        source
+    )
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (pi_professor_id)
+    DO UPDATE SET
+        website = COALESCE(EXCLUDED.website, Lab.website),
+        description = COALESCE(EXCLUDED.description, Lab.description),
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query,(name, department_id, pi_professor_id, website, description, source))
+    lab_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return lab_id
+
+def update_lab_contact(pi_professor_id, name=None, website=None, description=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Lab
+    SET name = COALESCE(%s, name),
+        website = COALESCE(%s, website),
+        description = COALESCE(%s, description),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE pi_professor_id = %s
+    RETURNING id;
+    '''
+    cursor.execute(query,(name, website, description, pi_professor_id))
+    row = cursor.fetchone()
+    lab_id = row[0] if row else None
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return lab_id
+
+def insert_professor_department(professor_id, department_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ProfessorDepartment (
+        professor_id,
+        department_id
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (professor_id, department_id)
+    DO NOTHING;
+    '''
+    cursor.execute(query,(professor_id, department_id))
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+def insert_professor_lab(professor_id, lab_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ProfessorLab (
+        professor_id,
+        lab_id
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (professor_id, lab_id)
+    DO NOTHING;
+    '''
+    cursor.execute(query,(professor_id, lab_id))
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+def insert_lab_research_topic(lab_id, topic_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO LabResearchTopic (
+        lab_id,
+        topic_id
+    )
+    VALUES (%s, %s)
+    ON CONFLICT (lab_id, topic_id)
+    DO NOTHING;
+    '''
+    cursor.execute(query,(lab_id, topic_id))
+    connection.commit()
+    cursor.close()
+    connection.close()

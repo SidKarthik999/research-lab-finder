@@ -56,7 +56,9 @@ CREATE TABLE Lab (
         REFERENCES Department(id),
 
     FOREIGN KEY (pi_professor_id)
-        REFERENCES Professor(id)
+        REFERENCES Professor(id),
+
+    UNIQUE (pi_professor_id)
 );
 
 CREATE TABLE Publication (
