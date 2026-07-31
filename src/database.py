@@ -169,8 +169,34 @@ def insert_publication(title, abstract=None, publication_date=None, journal=None
         updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
-    cursor.execute(query,(title, abstract, publication_date, journal, doi, url, openalex_id, source))
-    publication_id = cursor.fetchone()[0]
+    try:
+        cursor.execute(query,(title, abstract, publication_date, journal, doi, url, openalex_id, source))
+        publication_id = cursor.fetchone()[0]
+    except UniqueViolation:
+        cursor.close()
+        return merge_publication_by_doi(doi, title, abstract, publication_date, journal, url)
+
+    connection.commit()
+    cursor.close()
+    return publication_id
+
+def merge_publication_by_doi(doi, title=None, abstract=None, publication_date=None, journal=None, url=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Publication
+    SET title = COALESCE(%s, title),
+        abstract = COALESCE(%s, abstract),
+        publication_date = COALESCE(%s, publication_date),
+        journal = COALESCE(%s, journal),
+        url = COALESCE(%s, url),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE doi = %s
+    RETURNING id;
+    '''
+    cursor.execute(query,(title, abstract, publication_date, journal, url, doi))
+    row = cursor.fetchone()
+    publication_id = row[0] if row else None
     connection.commit()
     cursor.close()
     return publication_id

@@ -100,9 +100,14 @@ def insert_openalex_lab(professor_id, professor_name):
 def insert_publications_from_institution(works):
     publications_inserted = 0
     for work in works:
-        publication_id = insert_openalex_publication(work)
-        print(f"Inserted {work['display_name']}: {publication_id}")
-        publications_inserted += 1
+        try:
+            publication_id = insert_openalex_publication(work)
+            print(f"Inserted {work['display_name']}: {publication_id}")
+            publications_inserted += 1
+
+        except Exception as e:
+            print(f"Failed {work['display_name']}: {e}")
+            continue
 
         for author in work['authorships']:
             try:
