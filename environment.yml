@@ -48,4 +48,6 @@ dependencies:
   - pip:
       - pyalex==0.21
       - python-dotenv==1.2.2
+      - fastapi==0.121.0
+      - uvicorn==0.38.0
 prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder
