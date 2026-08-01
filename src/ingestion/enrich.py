@@ -1,4 +1,5 @@
 import re
+import time
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -6,6 +7,24 @@ from src.database import get_all_professors, insert_professor, update_lab_contac
 
 ORCID_API_BASE = "https://pub.orcid.org/v3.0"
 USER_AGENT = "researchlabfinder-bot (contact: sanjanakarthik789@gmail.com)"
+
+# ORCID sits behind Cloudflare rate limiting that blocks on burst volume
+# (no Retry-After, cooldown lasting minutes), not a simple per-request cap.
+# All calls to it are serialized to at most one request per second globally,
+# separate from the (many different host) lab page fetches.
+ORCID_MIN_INTERVAL = 1.0
+ORCID_MAX_RETRIES = 3
+_orcid_lock = threading.Lock()
+_orcid_next_allowed_at = [0.0]
+
+def _throttle_orcid():
+    with _orcid_lock:
+        now = time.monotonic()
+        wait_seconds = _orcid_next_allowed_at[0] - now
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+            now = time.monotonic()
+        _orcid_next_allowed_at[0] = now + ORCID_MIN_INTERVAL
 
 WEBSITE_KEYWORDS = ("lab", "website", "homepage", "personal")
 
@@ -22,20 +41,31 @@ def normalize_orcid(orcid):
 
 
 def get_orcid_researcher_urls(orcid):
-    response = requests.get(
-        f"{ORCID_API_BASE}/{normalize_orcid(orcid)}/researcher-urls",
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-        timeout=10,
-    )
+    url = f"{ORCID_API_BASE}/{normalize_orcid(orcid)}/researcher-urls"
+    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+
+    for attempt in range(ORCID_MAX_RETRIES):
+        _throttle_orcid()
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            wait_seconds = float(retry_after) if retry_after else 10 * (attempt + 1)
+            time.sleep(wait_seconds)
+            continue
+
+        response.raise_for_status()
+        data = response.json()
+        urls = []
+        for entry in data.get("researcher-url", []):
+            name = (entry.get("url-name") or "")
+            entry_url = (entry.get("url") or {}).get("value")
+            if entry_url:
+                urls.append({"name": name, "url": entry_url})
+        return urls
+
     response.raise_for_status()
-    data = response.json()
-    urls = []
-    for entry in data.get("researcher-url", []):
-        name = (entry.get("url-name") or "")
-        url = (entry.get("url") or {}).get("value")
-        if url:
-            urls.append({"name": name, "url": url})
-    return urls
+    return []
 
 
 def normalize_url(url):
