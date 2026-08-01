@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Research Lab Finder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Research Lab Finder</h1>
+    <p>Search professors by name, institution, or location.</p>
+  </header>
+
+  <main>
+    <form id="search-form">
+      <div class="field">
+        <label for="q">Keyword</label>
+        <input type="text" id="q" name="q" placeholder="e.g. Dr. Smith, MIT" />
+      </div>
+      <div class="field">
+        <label for="institution">Institution</label>
+        <input type="text" id="institution" name="institution" placeholder="e.g. Stanford" />
+      </div>
+      <div class="field">
+        <label for="city">City</label>
+        <input type="text" id="city" name="city" />
+      </div>
+      <div class="field">
+        <label for="state">State</label>
+        <input type="text" id="state" name="state" />
+      </div>
+      <div class="field">
+        <label for="country">Country</label>
+        <input type="text" id="country" name="country" />
+      </div>
+      <button type="submit">Search</button>
+    </form>
+
+    <p id="status" aria-live="polite"></p>
+
+    <ul id="results"></ul>
+
+    <div id="pagination">
+      <button id="prev-page" type="button" disabled>Previous</button>
+      <span id="page-label"></span>
+      <button id="next-page" type="button" disabled>Next</button>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
