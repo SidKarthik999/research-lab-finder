@@ -1,23 +1,25 @@
 import psycopg
 from psycopg.errors import UniqueViolation
+import threading
 
-_connection = None
+_local = threading.local()
 
 def get_connection():
-    global _connection
-    if _connection is None or _connection.closed:
-        _connection = psycopg.connect(
+    connection = getattr(_local, "connection", None)
+    if connection is None or connection.closed:
+        connection = psycopg.connect(
             dbname='research_lab_finder',
             user='siddanthkarthik',
             autocommit=True
         )
-    return _connection
+        _local.connection = connection
+    return connection
 
 def close_connection():
-    global _connection
-    if _connection is not None and not _connection.closed:
-        _connection.close()
-    _connection = None
+    connection = getattr(_local, "connection", None)
+    if connection is not None and not connection.closed:
+        connection.close()
+    _local.connection = None
 
 def get_all_institutions():
     connection = get_connection()

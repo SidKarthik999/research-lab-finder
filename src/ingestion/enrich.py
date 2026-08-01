@@ -1,6 +1,7 @@
 import re
-import time
+import threading
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from src.database import get_all_professors, insert_professor, update_lab_contact, close_connection
 
 ORCID_API_BASE = "https://pub.orcid.org/v3.0"
@@ -97,24 +98,26 @@ def enrich_professor(professor_id, name, orcid, openalex_id):
     return website
 
 
-def enrich_all_professors():
-    professors = get_all_professors()
+def enrich_all_professors(max_workers=15):
+    professors = [p for p in get_all_professors() if p[3]]
     enriched = 0
-    for professor in professors:
-        professor_id, name, email, orcid, website, source, created_at, updated_at, openalex_id = professor
-        if not orcid:
-            continue
+    lock = threading.Lock()
 
+    def process(professor):
+        nonlocal enriched
+        professor_id, name, email, orcid, website, source, created_at, updated_at, openalex_id = professor
         try:
             result = enrich_professor(professor_id, name, orcid, openalex_id)
             print(f"Enriched {name}: {result}")
             if result:
-                enriched += 1
+                with lock:
+                    enriched += 1
 
         except Exception as e:
             print(f"Failed {name}: {e}")
 
-        time.sleep(0.75)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(process, professors))
 
     return enriched
 
