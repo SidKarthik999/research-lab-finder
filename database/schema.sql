@@ -1,3 +1,29 @@
+-- Barebones-plus-publications-plus-labs MVP schema.
+--
+-- ResearchTopic, Department, and their junction tables (LabResearchTopic,
+-- ProfessorDepartment, PublicationTopic) are still intentionally shelved --
+-- the prior Works-based ingestion produced misattributed labs and synthetic
+-- placeholder rows. Publication came back first (2026-08-01) because it
+-- hangs safely off already-attributed Professor rows (see
+-- src/ingestion/publications.py). Lab came back second (2026-08-01) sourced
+-- from university lab-directory pages rather than OpenAlex Works, since
+-- OpenAlex has no lab entity -- see src/ingestion/labs.py and CLAUDE.md.
+
+DROP TABLE IF EXISTS
+    ProfessorLab,
+    LabResearchTopic,
+    PublicationTopic,
+    ProfessorPublication,
+    ProfessorDepartment,
+    Lab,
+    Publication,
+    ResearchTopic,
+    Department
+    CASCADE;
+
+DROP TABLE IF EXISTS Professor CASCADE;
+DROP TABLE IF EXISTS Institution CASCADE;
+
 CREATE TABLE Institution (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -10,20 +36,6 @@ CREATE TABLE Institution (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     openalex_id TEXT UNIQUE,
     ror_id TEXT UNIQUE
-);
-
-CREATE TABLE Department (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    institution_id INTEGER NOT NULL,
-    source TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(name, institution_id),
-
-    FOREIGN KEY (institution_id)
-        REFERENCES Institution(id)
 );
 
 CREATE TABLE Professor (
@@ -42,29 +54,6 @@ CREATE TABLE Professor (
         REFERENCES Institution(id)
 );
 
-CREATE TABLE Lab (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    website TEXT,
-    description TEXT,
-    city TEXT,
-    state TEXT,
-    country TEXT,
-    department_id INTEGER,
-    pi_professor_id INTEGER,
-    source TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (department_id)
-        REFERENCES Department(id),
-
-    FOREIGN KEY (pi_professor_id)
-        REFERENCES Professor(id),
-
-    UNIQUE (pi_professor_id)
-);
-
 CREATE TABLE Publication (
     id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -77,14 +66,6 @@ CREATE TABLE Publication (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     openalex_id TEXT UNIQUE
-);
-
-CREATE TABLE ResearchTopic (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    source TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE ProfessorPublication (
@@ -101,46 +82,20 @@ CREATE TABLE ProfessorPublication (
         REFERENCES Publication(id)
 );
 
-CREATE TABLE PublicationTopic (
-    publication_id INTEGER NOT NULL,
-    topic_id INTEGER NOT NULL,
+CREATE TABLE Lab (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    institution_id INTEGER,
+    department TEXT,
+    website TEXT,
+    source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (publication_id, topic_id),
+    FOREIGN KEY (institution_id)
+        REFERENCES Institution(id),
 
-    FOREIGN KEY (publication_id)
-        REFERENCES Publication(id),
-
-    FOREIGN KEY (topic_id)
-        REFERENCES ResearchTopic(id)
-);
-
-CREATE TABLE LabResearchTopic (
-    lab_id INTEGER NOT NULL,
-    topic_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (lab_id, topic_id),
-
-    FOREIGN KEY (lab_id)
-        REFERENCES Lab(id),
-
-    FOREIGN KEY (topic_id)
-        REFERENCES ResearchTopic(id)
-);
-
-CREATE TABLE ProfessorDepartment (
-    professor_id INTEGER NOT NULL,
-    department_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (professor_id, department_id),
-
-    FOREIGN KEY (professor_id)
-        REFERENCES Professor(id),
-
-    FOREIGN KEY (department_id)
-        REFERENCES Department(id)
+    UNIQUE (institution_id, name)
 );
 
 CREATE TABLE ProfessorLab (
