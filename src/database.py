@@ -102,7 +102,7 @@ def insert_institution(name, website=None, city=None, state=None, country_code=N
     return institution_id
 
 
-def insert_professor(name, email=None, orcid=None, website=None, source=None, openalex_id=None):
+def insert_professor(name, email=None, orcid=None, website=None, institution_id=None, source=None, openalex_id=None):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
@@ -111,40 +111,43 @@ def insert_professor(name, email=None, orcid=None, website=None, source=None, op
         email,
         orcid,
         website,
+        institution_id,
         openalex_id,
         source
     )
-    VALUES (%s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (openalex_id)
     DO UPDATE SET
         website = COALESCE(EXCLUDED.website, Professor.website),
         email = COALESCE(EXCLUDED.email, Professor.email),
+        institution_id = COALESCE(EXCLUDED.institution_id, Professor.institution_id),
         updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
     try:
-        cursor.execute(query,(name, email, orcid, website, openalex_id, source))
+        cursor.execute(query,(name, email, orcid, website, institution_id, openalex_id, source))
         professor_id = cursor.fetchone()[0]
     except UniqueViolation:
         cursor.close()
-        return merge_professor_by_orcid(orcid, email, website)
+        return merge_professor_by_orcid(orcid, email, website, institution_id)
 
     connection.commit()
     cursor.close()
     return professor_id
 
-def merge_professor_by_orcid(orcid, email=None, website=None):
+def merge_professor_by_orcid(orcid, email=None, website=None, institution_id=None):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
     UPDATE Professor
     SET website = COALESCE(%s, website),
         email = COALESCE(%s, email),
+        institution_id = COALESCE(%s, institution_id),
         updated_at = CURRENT_TIMESTAMP
     WHERE orcid = %s
     RETURNING id;
     '''
-    cursor.execute(query,(website, email, orcid))
+    cursor.execute(query,(website, email, institution_id, orcid))
     row = cursor.fetchone()
     professor_id = row[0] if row else None
     connection.commit()

@@ -32,10 +32,14 @@ CREATE TABLE Professor (
     email TEXT,
     ORCID TEXT UNIQUE,
     website TEXT,
+    institution_id INTEGER,
     source TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    openalex_id TEXT UNIQUE
+    openalex_id TEXT UNIQUE,
+
+    FOREIGN KEY (institution_id)
+        REFERENCES Institution(id)
 );
 
 CREATE TABLE Lab (

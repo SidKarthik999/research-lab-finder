@@ -56,11 +56,12 @@ def get_openalex_works(openalex_institution_id):
     )
     return works
 
-def insert_openalex_professor(author):
+def insert_openalex_professor(author, institution_id=None):
     professor_id = insert_professor(
         name=author['author']['display_name'],
         orcid=author['author']['orcid'],
         openalex_id=author['author']['id'],
+        institution_id=institution_id,
         source="OpenAlex"
     )
     return professor_id
@@ -97,7 +98,7 @@ def insert_openalex_lab(professor_id, professor_name):
     insert_professor_lab(professor_id, lab_id)
     return lab_id
 
-def insert_publications_from_institution(works):
+def insert_publications_from_institution(works, institution_id=None):
     publications_inserted = 0
     for work in works:
         try:
@@ -111,7 +112,7 @@ def insert_publications_from_institution(works):
 
         for author in work['authorships']:
             try:
-                professor_id = insert_openalex_professor(author)
+                professor_id = insert_openalex_professor(author, institution_id)
                 insert_professor_publication(professor_id, publication_id)
 
                 lab_id = insert_openalex_lab(professor_id, author['author']['display_name'])
@@ -142,7 +143,7 @@ def ingest_institution(institution_name):
     print(f"Inserted {institution_name}: {institution_id}")
 
     works = get_openalex_works(institution["id"])
-    insert_publications_from_institution(works)
+    insert_publications_from_institution(works, institution_id)
 
     return institution_id
 
