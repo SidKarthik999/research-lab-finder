@@ -1,18 +1,49 @@
+import os
 import re
 import time
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
 from src.database import get_all_professors, insert_professor, update_lab_contact, close_connection
 
+load_dotenv()
+
 ORCID_API_BASE = "https://pub.orcid.org/v3.0"
+ORCID_TOKEN_URL = "https://orcid.org/oauth/token"
+ORCID_CLIENT_ID = os.getenv("ORCID_CLIENT_ID")
+ORCID_CLIENT_SECRET = os.getenv("ORCID_CLIENT_SECRET")
 USER_AGENT = "researchlabfinder-bot (contact: sanjanakarthik789@gmail.com)"
 
-# ORCID sits behind Cloudflare rate limiting that blocks on burst volume
-# (no Retry-After, cooldown lasting minutes), not a simple per-request cap.
-# All calls to it are serialized to at most one request per second globally,
-# separate from the (many different host) lab page fetches.
-ORCID_MIN_INTERVAL = 1.0
+# Authenticated (client-credentials) requests get a much higher ORCID quota
+# than anonymous ones. The token is long-lived, so it's fetched once and reused.
+_orcid_token_lock = threading.Lock()
+_orcid_token = [None]
+
+def _get_orcid_token():
+    if not ORCID_CLIENT_ID or not ORCID_CLIENT_SECRET:
+        return None
+
+    with _orcid_token_lock:
+        if _orcid_token[0] is None:
+            response = requests.post(
+                ORCID_TOKEN_URL,
+                headers={"Accept": "application/json"},
+                data={
+                    "client_id": ORCID_CLIENT_ID,
+                    "client_secret": ORCID_CLIENT_SECRET,
+                    "grant_type": "client_credentials",
+                    "scope": "/read-public",
+                },
+                timeout=10,
+            )
+            response.raise_for_status()
+            _orcid_token[0] = response.json()["access_token"]
+        return _orcid_token[0]
+
+# Anonymous ORCID requests share a low daily quota; authenticated ones don't
+# need the same defensive throttling, but keep a light pace regardless.
+ORCID_MIN_INTERVAL = 0.1 if (ORCID_CLIENT_ID and ORCID_CLIENT_SECRET) else 1.0
 ORCID_MAX_RETRIES = 3
 _orcid_lock = threading.Lock()
 _orcid_next_allowed_at = [0.0]
@@ -43,6 +74,10 @@ def normalize_orcid(orcid):
 def get_orcid_researcher_urls(orcid):
     url = f"{ORCID_API_BASE}/{normalize_orcid(orcid)}/researcher-urls"
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+
+    token = _get_orcid_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
     for attempt in range(ORCID_MAX_RETRIES):
         _throttle_orcid()
