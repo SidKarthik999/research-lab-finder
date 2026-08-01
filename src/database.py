@@ -33,48 +33,6 @@ def get_all_institutions():
     cursor.close()
     return institutions
 
-def get_all_labs():
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    SELECT *
-    FROM Lab
-    '''
-    cursor.execute(query)
-    labs = cursor.fetchall()
-    cursor.close()
-    return labs
-
-def get_labs_at_institution(institution_name):
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    SELECT Lab.name
-    FROM Lab
-    JOIN Department on Lab.department_id = Department.id
-    JOIN Institution on Department.institution_id = Institution.id
-    WHERE Institution.name = %s
-    '''
-    cursor.execute(query, (institution_name,))
-    labs = cursor.fetchall()
-    cursor.close()
-    return labs
-
-def get_labs_by_topic(topic_name):
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    SELECT Lab.name
-    FROM Lab
-    JOIN LabResearchTopic on Lab.id = LabResearchTopic.lab_id
-    JOIN ResearchTopic on LabResearchTopic.topic_id = ResearchTopic.id
-    WHERE ResearchTopic.name = %s
-    '''
-    cursor.execute(query, (topic_name,))
-    labs = cursor.fetchall()
-    cursor.close()
-    return labs
-
 def insert_institution(name, website=None, city=None, state=None, country_code=None, openalex_id=None, ror_id=None, source=None):
     connection = get_connection()
     cursor = connection.cursor()
@@ -118,6 +76,7 @@ def insert_professor(name, email=None, orcid=None, website=None, institution_id=
     VALUES (%s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (openalex_id)
     DO UPDATE SET
+        name = COALESCE(EXCLUDED.name, Professor.name),
         website = COALESCE(EXCLUDED.website, Professor.website),
         email = COALESCE(EXCLUDED.email, Professor.email),
         institution_id = COALESCE(EXCLUDED.institution_id, Professor.institution_id),
@@ -153,6 +112,71 @@ def merge_professor_by_orcid(orcid, email=None, website=None, institution_id=Non
     connection.commit()
     cursor.close()
     return professor_id
+
+def get_all_professors():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT *
+    FROM Professor
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    return professors
+
+def get_professors_with_orcid():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT Professor.id, Professor.name, Professor.orcid, Institution.name, Institution.country_code
+    FROM Professor
+    JOIN Institution ON Institution.id = Professor.institution_id
+    WHERE Professor.orcid IS NOT NULL
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    return professors
+
+def update_professor_name(professor_id, name):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET name = %s,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (name, professor_id))
+    connection.commit()
+    cursor.close()
+
+def clear_professor_orcid(professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET orcid = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (professor_id,))
+    connection.commit()
+    cursor.close()
+
+def get_professors_for_publication_ingestion():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, name, openalex_id
+    FROM Professor
+    WHERE openalex_id IS NOT NULL
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    return professors
 
 def insert_publication(title, abstract=None, publication_date=None, journal=None, doi=None, url=None, source=None, openalex_id=None):
     connection = get_connection()
@@ -206,26 +230,6 @@ def merge_publication_by_doi(doi, title=None, abstract=None, publication_date=No
     cursor.close()
     return publication_id
 
-def insert_research_topic(name, source=None):
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    INSERT INTO ResearchTopic (
-        name,
-        source
-    )
-    VALUES (%s, %s)
-    ON CONFLICT (name)
-    DO UPDATE SET
-        updated_at = CURRENT_TIMESTAMP
-    RETURNING id;
-    '''
-    cursor.execute(query,(name, source))
-    topic_id = cursor.fetchone()[0]
-    connection.commit()
-    cursor.close()
-    return topic_id
-
 def insert_professor_publication(professor_id, publication_id):
     connection = get_connection()
     cursor = connection.cursor()
@@ -242,115 +246,83 @@ def insert_professor_publication(professor_id, publication_id):
     connection.commit()
     cursor.close()
 
-def insert_publication_topic(publication_id, topic_id):
+def get_institution_by_name(name):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
-    INSERT INTO PublicationTopic (
-        publication_id,
-        topic_id
-    )
-    VALUES (%s, %s)
-    ON CONFLICT (publication_id, topic_id)
-    DO NOTHING;
+    SELECT id FROM Institution
+    WHERE name = %s;
     '''
-    cursor.execute(query,(publication_id, topic_id))
-    connection.commit()
+    cursor.execute(query, (name,))
+    row = cursor.fetchone()
     cursor.close()
+    return row[0] if row else None
 
-def get_all_professors():
+def get_professors_by_institution(institution_id):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
-    SELECT *
+    SELECT id, name
     FROM Professor
+    WHERE institution_id = %s
     '''
-    cursor.execute(query)
+    cursor.execute(query, (institution_id,))
     professors = cursor.fetchall()
     cursor.close()
     return professors
 
-def insert_department(name, institution_id, source=None):
+def insert_professor_stub(name, institution_id, source=None):
     connection = get_connection()
     cursor = connection.cursor()
-    query = '''
-    INSERT INTO Department (
+    select_query = '''
+    SELECT id FROM Professor
+    WHERE institution_id = %s AND name = %s;
+    '''
+    cursor.execute(select_query, (institution_id, name))
+    row = cursor.fetchone()
+    if row:
+        cursor.close()
+        return row[0]
+
+    insert_query = '''
+    INSERT INTO Professor (
         name,
         institution_id,
         source
     )
     VALUES (%s, %s, %s)
-    ON CONFLICT (name, institution_id)
-    DO UPDATE SET
-        updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
-    cursor.execute(query,(name, institution_id, source))
-    department_id = cursor.fetchone()[0]
+    cursor.execute(insert_query, (name, institution_id, source))
+    professor_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
-    return department_id
+    return professor_id
 
-def insert_lab(name, department_id=None, pi_professor_id=None, website=None, description=None, source=None):
+def insert_lab(name, institution_id, department=None, website=None, source=None):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
     INSERT INTO Lab (
         name,
-        department_id,
-        pi_professor_id,
+        institution_id,
+        department,
         website,
-        description,
         source
     )
-    VALUES (%s, %s, %s, %s, %s, %s)
-    ON CONFLICT (pi_professor_id)
+    VALUES (%s, %s, %s, %s, %s)
+    ON CONFLICT (institution_id, name)
     DO UPDATE SET
+        department = COALESCE(EXCLUDED.department, Lab.department),
         website = COALESCE(EXCLUDED.website, Lab.website),
-        description = COALESCE(EXCLUDED.description, Lab.description),
         updated_at = CURRENT_TIMESTAMP
     RETURNING id;
     '''
-    cursor.execute(query,(name, department_id, pi_professor_id, website, description, source))
+    cursor.execute(query, (name, institution_id, department, website, source))
     lab_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()
     return lab_id
-
-def update_lab_contact(pi_professor_id, name=None, website=None, description=None):
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    UPDATE Lab
-    SET name = COALESCE(%s, name),
-        website = COALESCE(%s, website),
-        description = COALESCE(%s, description),
-        updated_at = CURRENT_TIMESTAMP
-    WHERE pi_professor_id = %s
-    RETURNING id;
-    '''
-    cursor.execute(query,(name, website, description, pi_professor_id))
-    row = cursor.fetchone()
-    lab_id = row[0] if row else None
-    connection.commit()
-    cursor.close()
-    return lab_id
-
-def insert_professor_department(professor_id, department_id):
-    connection = get_connection()
-    cursor = connection.cursor()
-    query = '''
-    INSERT INTO ProfessorDepartment (
-        professor_id,
-        department_id
-    )
-    VALUES (%s, %s)
-    ON CONFLICT (professor_id, department_id)
-    DO NOTHING;
-    '''
-    cursor.execute(query,(professor_id, department_id))
-    connection.commit()
-    cursor.close()
 
 def insert_professor_lab(professor_id, lab_id):
     connection = get_connection()
@@ -364,22 +336,22 @@ def insert_professor_lab(professor_id, lab_id):
     ON CONFLICT (professor_id, lab_id)
     DO NOTHING;
     '''
-    cursor.execute(query,(professor_id, lab_id))
+    cursor.execute(query, (professor_id, lab_id))
     connection.commit()
     cursor.close()
 
-def insert_lab_research_topic(lab_id, topic_id):
+def get_publications_for_professor(professor_id):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
-    INSERT INTO LabResearchTopic (
-        lab_id,
-        topic_id
-    )
-    VALUES (%s, %s)
-    ON CONFLICT (lab_id, topic_id)
-    DO NOTHING;
+    SELECT Publication.title, Publication.journal, Publication.publication_date,
+           Publication.doi, Publication.url
+    FROM Publication
+    JOIN ProfessorPublication ON ProfessorPublication.publication_id = Publication.id
+    WHERE ProfessorPublication.professor_id = %s
+    ORDER BY Publication.publication_date DESC NULLS LAST;
     '''
-    cursor.execute(query,(lab_id, topic_id))
-    connection.commit()
+    cursor.execute(query, (professor_id,))
+    publications = cursor.fetchall()
     cursor.close()
+    return publications
