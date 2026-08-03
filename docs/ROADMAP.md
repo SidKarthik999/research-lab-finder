@@ -29,9 +29,9 @@ Every phase below is judged against that end-to-end path.
 
 One honest caveat from Phase 1: the phase's own "done when" example (`computational neuroscience` + `Texas`) currently returns zero results — not a search bug, but a coverage gap. Only 4 of the 100 ingested institutions are in Texas, and "computational neuroscience" as an exact phrase doesn't overlap with any of their professors' topics/abstracts. Broader combinations (e.g. `neuroscience` + `California`, which has many more ingested institutions) work as intended. This is precisely the gap Phase 3 (coverage) exists to close.
 
-**Phase 2 in progress**: `researcher_urls.py` backfilled `Professor.website` from ORCID's researcher-urls (653 of 3,621 ORCID holders had a usable one — most people don't add any). The frontend contact panel now also shows a Google Scholar author-search link and an institution-directory search link, both computed on the fly from data already on hand, no scraping. Still 0 emails — that piece of Phase 2 isn't started.
+**Phase 2 is done**: `researcher_urls.py` backfilled `Professor.website` from ORCID's researcher-urls (653 of 3,621 ORCID holders had a usable one — most people don't add any). `emails.py` backfilled `Professor.email` from ORCID's public, ORCID-verified `emails` field (293 of 3,621 — only ~8% make an email public, but every one is opt-in-disclosed and verified, not scraped or guessed). The frontend contact panel also shows a Google Scholar author-search link and an institution site-search link, both computed on the fly from data already on hand — link wording and the Scholar query were both tuned after real usage turned up problems (see commit history: appending institution to the Scholar query regressed a real profile and was reverted; the directory link was relabeled since it's a search, not an actual directory).
 
-Professor contact coverage: **0 emails, 653 websites** (up from 0), 3,621 ORCIDs.
+Professor contact coverage: **293 emails, 653 websites** (up from 0/0), 3,621 ORCIDs.
 
 ### What's working
 
@@ -51,10 +51,12 @@ correctness.
 
 1. ~~**Search doesn't cover research fields.**~~ **Fixed in Phase 1.**
    `/api/search` now filters by topic/field and full-text publication search.
-2. **Contactability is partial.** 653 of 4,431 professors have a website
-   (via ORCID researcher-urls) and every result now has computed Scholar/
-   directory search links, but 0 have a stored email. Getting *to* a contact
-   page works; a direct email address still doesn't exist anywhere.
+2. ~~**Nobody is contactable.**~~ **Fixed in Phase 2**, as much as it's going
+   to be without scraping. 653 of 4,431 professors have a website, 293 have a
+   verified public email (both from ORCID, nothing scraped or guessed), and
+   every result has computed Scholar/institution search links regardless.
+   Most professors still won't have a direct email — that's a real ceiling
+   of "what's legitimately public," not a to-do item.
 3. **Coverage is the wrong slice.** Top-100 institutions × top-50 most-cited
    faculty is elite- and medicine-skewed — close to the *least* accessible
    population for an unknown student.

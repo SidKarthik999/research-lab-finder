@@ -71,6 +71,10 @@ Run after `enrich_names.py` (not required, but avoids fetching researcher-urls f
 
 Most professors have zero researcher-urls on file (in a spot-check of 60, only 5 had any) — that's expected, not a bug. `pick_best_researcher_url()` is a pure function that: excludes social/networking links (LinkedIn, Twitter, etc. — matched against the free-text `url-name` ORCID users typed themselves, so best-effort not exhaustive), prefers a URL whose name signals an actual personal/lab/faculty page ("lab", "faculty", "homepage", ...), and otherwise falls back to the first remaining candidate (e.g. Google Scholar, a publications list) rather than returning nothing. Real ORCID data has entries with a blank `url-name` that are still legitimate lab sites (e.g. `gmwgroup.harvard.edu` with no name at all) — those still count as fallback candidates.
 
+### Professor emails (`src/ingestion/emails.py`, Phase 2)
+
+The roadmap's "don't scrape or guess emails" rule doesn't rule out ORCID's own public `emails` field on `/person` — an address the researcher explicitly chose to expose on their profile, which ORCID itself verified (a confirmation link sent to it) before marking it `verified: true`. That's neither scraped nor guessed: the exposure decision was the person's, the correctness check was ORCID's. `pick_best_orcid_email()` only accepts `verified` entries (unverified is free text anyone could type into their own profile — same "might be wrong" risk avoided everywhere else in this pipeline), preferring the one marked `primary` if there is one. Only ~10% of ORCID holders have a public email at all (checked against a 100-professor sample before building this) — most people leave it private, which is expected, not a bug.
+
 ### Publications (`src/ingestion/publications.py`)
 
 Run after professors are ingested (and ideally after `enrich_names.py`, though independent of it). For each `Professor` row with an `openalex_id`, fetches that professor's own top-cited works directly — `pyalex.Works().filter(author={"id": openalex_author_id})` — and links them via `ProfessorPublication`. This is the safe pattern the original pipeline didn't use: a publication is only ever linked to the professor whose own author id was queried for it, so there's no attribution risk the way there was with institution-level Works queries. `strip_markup()` cleans OpenAlex titles that embed raw MathML for equations (common in physics papers) so they render as plain text.
@@ -89,6 +93,7 @@ python -m src.ingestion.enrich_names
 python -m src.ingestion.publications
 python -m src.ingestion.topics
 python -m src.ingestion.researcher_urls
+python -m src.ingestion.emails
 ```
 
 `src/test_connection.py` is a manual smoke-test script (imports `database` directly, not `src.database` — must be run from inside `src/`), not an automated test.
