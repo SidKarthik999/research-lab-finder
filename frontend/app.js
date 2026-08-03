@@ -112,13 +112,20 @@ function institutionDomain(url) {
 // person" API, so this is a search link, same idea as the institution
 // directory link: it reliably gets a student *to* a place to look, even
 // when we don't have a direct URL stored.
-function scholarSearchUrl(name) {
-  const params = new URLSearchParams({ view_op: "search_authors", mauthors: name });
+function scholarSearchUrl(name, institution) {
+  // Name alone is ambiguous (common names, or an author who isn't the top
+  // match) -- including the institution narrows this to the right person
+  // far more often.
+  const mauthors = institution ? `${name} ${institution}` : name;
+  const params = new URLSearchParams({ view_op: "search_authors", mauthors });
   return `https://scholar.google.com/citations?${params}`;
 }
 
 function directorySearchUrl(domain, name) {
-  const params = new URLSearchParams({ q: `site:${domain} ${name}` });
+  // The name must be quoted -- otherwise Google treats "Jeffrey" and
+  // "Tyner" as two independent keywords anywhere on the site instead of
+  // requiring them together, which noticeably hurts precision.
+  const params = new URLSearchParams({ q: `site:${domain} "${name}"` });
   return `https://www.google.com/search?${params}`;
 }
 
@@ -150,7 +157,7 @@ function renderResults(results) {
       professor.website && `<a href="${escapeHtml(professor.website)}" target="_blank" rel="noopener">Website</a>`,
       professor.orcid && `<a href="${escapeHtml(professor.orcid)}" target="_blank" rel="noopener">ORCID</a>`,
       professorName &&
-        `<a href="${escapeHtml(scholarSearchUrl(professorName))}" target="_blank" rel="noopener">Find on Google Scholar</a>`,
+        `<a href="${escapeHtml(scholarSearchUrl(professorName, professor.institution_name))}" target="_blank" rel="noopener">Find on Google Scholar</a>`,
       domain &&
         professorName &&
         `<a href="${escapeHtml(directorySearchUrl(domain, professorName))}" target="_blank" rel="noopener">Search ${escapeHtml(professor.institution_name || "institution")} directory</a>`,
