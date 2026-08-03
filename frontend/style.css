@@ -53,12 +53,14 @@ label {
   color: var(--muted);
 }
 
-input {
+input,
+select {
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
+  font: inherit;
 }
 
 button {

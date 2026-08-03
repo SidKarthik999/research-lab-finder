@@ -225,6 +225,20 @@ def search_professors(
     return {"results": rows, "page": page, "limit": limit}
 
 
+@app.get("/api/fields")
+def list_fields():
+    # Unlike /api/topics (2,400+ distinct topic names -- autocomplete makes
+    # sense) or /api/institutions, ResearchTopic.field is OpenAlex's top-level
+    # taxonomy: ~26 fixed values. Small and stable enough for a dropdown to
+    # just fetch and show all of, no query/limit/pagination needed.
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT DISTINCT field FROM ResearchTopic WHERE field IS NOT NULL ORDER BY field;")
+    fields = [row[0] for row in cursor.fetchall()]
+    cursor.close()
+    return {"fields": fields}
+
+
 @app.get("/api/topics")
 def list_topics(q: str | None = None, limit: int = Query(20, ge=1, le=100)):
     connection = get_connection()

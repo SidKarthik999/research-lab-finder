@@ -37,6 +37,25 @@ function setupAutocomplete(inputId, datalistId, apiPath) {
 setupAutocomplete("institution", "institution-options", "/api/institutions");
 setupAutocomplete("topic", "topic-options", "/api/topics");
 
+async function loadFieldOptions() {
+  const select = document.getElementById("field");
+  try {
+    const response = await fetch("/api/fields");
+    if (!response.ok) return;
+    const data = await response.json();
+    for (const name of data.fields) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    }
+  } catch {
+    // Field is a nice-to-have filter -- leave it as "Any field" on failure.
+  }
+}
+
+loadFieldOptions();
+
 function currentFilters() {
   const data = new FormData(form);
   const filters = {};
