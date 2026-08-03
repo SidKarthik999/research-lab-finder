@@ -1,3 +1,13 @@
+-- ============================================================================
+-- DESTRUCTIVE. DROPs and rebuilds every table, discarding all data.
+--
+-- This file is for fresh installs / reference only -- it is NOT how schema
+-- changes get applied to a database with real data in it. Use
+-- `python -m database.migrate` (see database/migrations/) for that, after
+-- running `make backup`. Do not `psql -f` this file against a database that
+-- has ingested data you want to keep.
+-- ============================================================================
+--
 -- Barebones-plus-publications-plus-labs MVP schema.
 --
 -- ResearchTopic, Department, and their junction tables (LabResearchTopic,
