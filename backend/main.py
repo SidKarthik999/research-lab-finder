@@ -74,14 +74,21 @@ def build_search_query(
         conditions.append("Institution.country_code ILIKE %s")
         params.append(f"%{country}%")
     if topic:
+        # OpenAlex's taxonomy is domain > field > subfield > (specific) topic
+        # name -- there's rarely a topic literally named "Computer Science" or
+        # "Neuroscience", only specific topics under that field/subfield. This
+        # filter is meant to be the general-purpose "research area" box, so it
+        # matches all three levels rather than just the narrowest one.
         conditions.append(
             """EXISTS (
                 SELECT 1 FROM ProfessorTopic pt
                 JOIN ResearchTopic rt ON rt.id = pt.topic_id
-                WHERE pt.professor_id = Professor.id AND rt.name ILIKE %s
+                WHERE pt.professor_id = Professor.id
+                  AND (rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)
             )"""
         )
-        params.append(f"%{topic}%")
+        like = f"%{topic}%"
+        params.extend([like, like, like])
     if field:
         conditions.append(
             """EXISTS (
@@ -109,8 +116,9 @@ def build_search_query(
         rank_conditions.append("(rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)")
         rank_params.extend([like, like, like])
     if topic:
-        rank_conditions.append("rt.name ILIKE %s")
-        rank_params.append(f"%{topic}%")
+        rank_conditions.append("(rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)")
+        like = f"%{topic}%"
+        rank_params.extend([like, like, like])
     if field:
         rank_conditions.append("rt.field ILIKE %s")
         rank_params.append(f"%{field}%")
