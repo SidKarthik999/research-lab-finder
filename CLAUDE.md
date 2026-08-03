@@ -66,7 +66,7 @@ Run after professors are ingested (and ideally after `enrich_names.py`, though i
 
 ## Running things
 
-There is no build, lint, or test framework configured yet (no pytest/test directory, no linter config). To run a script, use the module path from the repo root so intra-package imports resolve, e.g.:
+There is no build or linter configured yet. To run a script, use the module path from the repo root so intra-package imports resolve, e.g.:
 
 ```
 python -m src.ingestion.openalex
@@ -75,6 +75,8 @@ python -m src.ingestion.publications
 ```
 
 `src/test_connection.py` is a manual smoke-test script (imports `database` directly, not `src.database` — must be run from inside `src/`), not an automated test.
+
+A `pytest` suite lives in `tests/`, covering the pure string-logic functions where the subtle bugs have historically been: `prefer_full_name`, `is_safe_replacement`, `normalize_casing` (name quality), `match_professor` (lab-PI matching), `reconstruct_abstract`, `strip_markup` (publication text). No database or network access — run with `python -m pytest` (or `make test`) from the repo root. `pytest.ini` scopes collection to `tests/` so `src/test_connection.py` isn't picked up as a test. When adding a new pure function with the same "subtle string-logic bug" shape, add coverage here rather than only exercising it via a manual `__main__` run.
 
 ## Web app (search MVP)
 

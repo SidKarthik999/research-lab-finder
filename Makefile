@@ -1,4 +1,4 @@
-.PHONY: backup migrate
+.PHONY: backup migrate test
 
 DB_NAME := research_lab_finder
 BACKUP_DIR := database/backups
@@ -9,3 +9,6 @@ backup:
 
 migrate:
 	python -m database.migrate
+
+test:
+	python -m pytest
