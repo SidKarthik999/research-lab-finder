@@ -9,18 +9,24 @@
 <body>
   <header>
     <h1>Research Lab Finder</h1>
-    <p>Search professors by name, institution, or location.</p>
+    <p>Search professors by research topic, name, institution, or location.</p>
   </header>
 
   <main>
     <form id="search-form">
       <div class="field">
         <label for="q">Keyword</label>
-        <input type="text" id="q" name="q" placeholder="e.g. Dr. Smith, MIT" />
+        <input type="text" id="q" name="q" placeholder="e.g. optogenetics, Dr. Smith, MIT" />
+      </div>
+      <div class="field">
+        <label for="topic">Research topic</label>
+        <input type="text" id="topic" name="topic" list="topic-options" placeholder="e.g. neuroscience" autocomplete="off" />
+        <datalist id="topic-options"></datalist>
       </div>
       <div class="field">
         <label for="institution">Institution</label>
-        <input type="text" id="institution" name="institution" placeholder="e.g. Stanford" />
+        <input type="text" id="institution" name="institution" list="institution-options" placeholder="e.g. Stanford" autocomplete="off" />
+        <datalist id="institution-options"></datalist>
       </div>
       <div class="field">
         <label for="city">City</label>

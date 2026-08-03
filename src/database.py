@@ -340,6 +340,52 @@ def insert_professor_lab(professor_id, lab_id):
     connection.commit()
     cursor.close()
 
+def insert_research_topic(openalex_id, name, subfield=None, field=None, domain=None, source=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ResearchTopic (
+        openalex_id,
+        name,
+        subfield,
+        field,
+        domain,
+        source
+    )
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (openalex_id)
+    DO UPDATE SET
+        name = EXCLUDED.name,
+        subfield = EXCLUDED.subfield,
+        field = EXCLUDED.field,
+        domain = EXCLUDED.domain,
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query, (openalex_id, name, subfield, field, domain, source))
+    topic_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return topic_id
+
+def insert_professor_topic(professor_id, topic_id, works_count=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ProfessorTopic (
+        professor_id,
+        topic_id,
+        works_count
+    )
+    VALUES (%s, %s, %s)
+    ON CONFLICT (professor_id, topic_id)
+    DO UPDATE SET
+        works_count = EXCLUDED.works_count;
+    '''
+    cursor.execute(query, (professor_id, topic_id, works_count))
+    connection.commit()
+    cursor.close()
+
 def get_publications_for_professor(professor_id):
     connection = get_connection()
     cursor = connection.cursor()

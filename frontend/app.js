@@ -8,6 +8,35 @@ const pageLabel = document.getElementById("page-label");
 const LIMIT = 20;
 let currentPage = 1;
 
+function setupAutocomplete(inputId, datalistId, apiPath) {
+  const input = document.getElementById(inputId);
+  const datalist = document.getElementById(datalistId);
+  let debounceTimer;
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    const value = input.value.trim();
+    if (!value) {
+      datalist.innerHTML = "";
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const response = await fetch(`${apiPath}?q=${encodeURIComponent(value)}&limit=10`);
+        if (!response.ok) return;
+        const data = await response.json();
+        const options = data.institutions || data.topics || [];
+        datalist.innerHTML = options.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
+      } catch {
+        // Autocomplete is a convenience, not critical -- fail silently.
+      }
+    }, 200);
+  });
+}
+
+setupAutocomplete("institution", "institution-options", "/api/institutions");
+setupAutocomplete("topic", "topic-options", "/api/topics");
+
 function currentFilters() {
   const data = new FormData(form);
   const filters = {};
@@ -53,10 +82,16 @@ function renderResults(results) {
       .filter(Boolean)
       .join(", ");
 
+    const topics = professor.topics || [];
+    const topicsHtml = topics.length
+      ? `<p class="topics">${topics.map((topic) => `<span class="topic-chip">${escapeHtml(topic)}</span>`).join("")}</p>`
+      : "";
+
     li.innerHTML = `
       <h2>${escapeHtml(professor.professor_name || "Unknown professor")}</h2>
       <p class="meta">${professor.institution_name ? escapeHtml(professor.institution_name) : "Institution unknown"}</p>
       ${location ? `<p class="meta">${escapeHtml(location)}</p>` : ""}
+      ${topicsHtml}
       <p class="meta">
         ${professor.email ? `<a href="mailto:${escapeHtml(professor.email)}">Email</a>` : ""}
         ${professor.website ? ` &middot; <a href="${escapeHtml(professor.website)}" target="_blank" rel="noopener">Website</a>` : ""}

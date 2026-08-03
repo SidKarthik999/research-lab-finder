@@ -12,16 +12,22 @@ credible email to a specific person who might say yes*."
 
 Every phase below is judged against that end-to-end path.
 
-## Where things stand (measured 2026-08-01)
+## Where things stand (measured 2026-08-02, after Phase 1)
 
 | Table | Rows | Notes |
 |---|---|---|
 | `Institution` | 100 | all US, top 100 by OpenAlex works count |
 | `Professor` | 4,431 | ~top 50 per institution by works count |
-| `Publication` | 34,069 | 23,250 have abstracts |
+| `Publication` | 34,069 | 23,250 have abstracts, all with a full-text `search_vector` |
 | `ProfessorPublication` | 43,880 | safely attributed (per-author queries) |
+| `ResearchTopic` | 2,483 | from each professor's own OpenAlex Author.topics |
+| `ProfessorTopic` | 21,864 | across 4,377 professors (54 had zero topics from OpenAlex) |
 | `Lab` | 45 | hand-extracted pilot; Stanford + Cornell only |
 | `ProfessorLab` | 37 | |
+
+**Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text `q` matching over topics and publication full text, and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips and topic autocomplete. 33 new tests (172 total).
+
+One honest caveat: the phase's own "done when" example (`computational neuroscience` + `Texas`) currently returns zero results — not a search bug, but a coverage gap. Only 4 of the 100 ingested institutions are in Texas, and "computational neuroscience" as an exact phrase doesn't overlap with any of their professors' topics/abstracts. Broader combinations (e.g. `neuroscience` + `California`, which has many more ingested institutions) work as intended. This is precisely the gap Phase 3 (coverage) exists to close.
 
 Professor contact coverage: **0 emails, 0 websites**, 3,621 ORCIDs.
 
