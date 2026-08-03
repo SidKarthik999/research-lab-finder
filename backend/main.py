@@ -21,7 +21,8 @@ app = FastAPI(title="Research Lab Finder API")
 
 
 def build_search_query(
-    q=None,
+    name=None,
+    text=None,
     institution=None,
     city=None,
     state=None,
@@ -36,31 +37,31 @@ def build_search_query(
     subtly wrong when several optional filters each contribute their own
     %s placeholders across multiple SQL fragments -- can be tested without a
     database connection.
+
+    name and text used to be a single combined "keyword" field that silently
+    OR'd together professor-name, institution-name, topic, and publication
+    full-text matching. Institution and topic/field now have their own
+    dedicated filters, so folding those into a "keyword" box was redundant;
+    what it uniquely offered -- searching by a professor's own name, and
+    free-text search over publication abstracts (finer-grained than the
+    curated topic taxonomy) -- are kept as two clearly-scoped filters instead.
     """
     conditions = []
     params = []
 
-    if q:
-        like = f"%{q}%"
+    if name:
+        conditions.append("Professor.name ILIKE %s")
+        params.append(f"%{name}%")
+    if text:
         conditions.append(
-            """(
-                Professor.name ILIKE %s
-                OR Institution.name ILIKE %s
-                OR EXISTS (
-                    SELECT 1 FROM ProfessorTopic pt
-                    JOIN ResearchTopic rt ON rt.id = pt.topic_id
-                    WHERE pt.professor_id = Professor.id
-                      AND (rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)
-                )
-                OR EXISTS (
-                    SELECT 1 FROM ProfessorPublication pp
-                    JOIN Publication pub ON pub.id = pp.publication_id
-                    WHERE pp.professor_id = Professor.id
-                      AND pub.search_vector @@ websearch_to_tsquery('english', %s)
-                )
+            """EXISTS (
+                SELECT 1 FROM ProfessorPublication pp
+                JOIN Publication pub ON pub.id = pp.publication_id
+                WHERE pp.professor_id = Professor.id
+                  AND pub.search_vector @@ websearch_to_tsquery('english', %s)
             )"""
         )
-        params.extend([like, like, like, like, like, q])
+        params.append(text)
     if institution:
         conditions.append("Institution.name ILIKE %s")
         params.append(f"%{institution}%")
@@ -104,17 +105,13 @@ def build_search_query(
 
     # Ranking signals, one row per professor:
     #  - topic_score: OpenAlex's per-topic works_count for whichever topic
-    #    matched (via q, topic=, or field=) -- how central that subject
-    #    actually is to this professor's own work.
-    #  - text_rank: how well their publications match the free-text query.
+    #    matched (via topic= or field=) -- how central that subject actually
+    #    is to this professor's own work.
+    #  - text_rank: how well their publications match the free-text search.
     #  - last_publication_date: recency, as the final tie-breaker, so
     #    inactive/retired professors don't rank above active ones.
     rank_conditions = []
     rank_params = []
-    if q:
-        like = f"%{q}%"
-        rank_conditions.append("(rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)")
-        rank_params.extend([like, like, like])
     if topic:
         rank_conditions.append("(rt.name ILIKE %s OR rt.field ILIKE %s OR rt.subfield ILIKE %s)")
         like = f"%{topic}%"
@@ -124,7 +121,7 @@ def build_search_query(
         rank_params.append(f"%{field}%")
     topic_rank_where = f"AND ({' OR '.join(rank_conditions)})" if rank_conditions else "AND FALSE"
     # Used to prioritize matching topics in the "topics" chip list below, so
-    # a professor surfaced by a topic/field/q match shows *that* topic first
+    # a professor surfaced by a topic/field match shows *that* topic first
     # rather than whatever their single largest topic happens to be.
     topic_match_expr = " OR ".join(rank_conditions) if rank_conditions else "FALSE"
 
@@ -184,17 +181,15 @@ def build_search_query(
     LIMIT %s OFFSET %s;
     """
 
-    all_params = [*rank_params, q, q, *rank_params, *params, limit, offset]
+    all_params = [*rank_params, text, text, *rank_params, *params, limit, offset]
 
     return query, all_params
 
 
 @app.get("/api/search")
 def search_professors(
-    q: str | None = Query(
-        None,
-        description="Keyword across professor/institution names, research topics, and publication text",
-    ),
+    name: str | None = Query(None, description="Match against the professor's own name"),
+    text: str | None = Query(None, description="Free-text search over publication titles and abstracts"),
     institution: str | None = None,
     city: str | None = None,
     state: str | None = None,
@@ -205,7 +200,8 @@ def search_professors(
     limit: int = Query(20, ge=1, le=100),
 ):
     query, all_params = build_search_query(
-        q=q,
+        name=name,
+        text=text,
         institution=institution,
         city=city,
         state=state,

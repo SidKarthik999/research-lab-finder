@@ -9,15 +9,11 @@
 <body>
   <header>
     <h1>Research Lab Finder</h1>
-    <p>Search professors by research topic, name, institution, or location.</p>
+    <p>Search professors by research field, topic, or institution.</p>
   </header>
 
   <main>
     <form id="search-form">
-      <div class="field">
-        <label for="q">Keyword</label>
-        <input type="text" id="q" name="q" placeholder="e.g. optogenetics, Dr. Smith, MIT" />
-      </div>
       <div class="field">
         <label for="field">Field</label>
         <select id="field" name="field">
@@ -34,18 +30,34 @@
         <input type="text" id="institution" name="institution" list="institution-options" placeholder="e.g. Stanford" autocomplete="off" />
         <datalist id="institution-options"></datalist>
       </div>
-      <div class="field">
-        <label for="city">City</label>
-        <input type="text" id="city" name="city" />
-      </div>
-      <div class="field">
-        <label for="state">State</label>
-        <input type="text" id="state" name="state" />
-      </div>
-      <div class="field">
-        <label for="country">Country</label>
-        <input type="text" id="country" name="country" />
-      </div>
+
+      <details id="advanced-search">
+        <summary>Advanced search</summary>
+        <div class="advanced-fields">
+          <div class="field">
+            <label for="name">Professor name</label>
+            <input type="text" id="name" name="name" placeholder="e.g. Smith" />
+          </div>
+          <div class="field">
+            <label for="text">Search publications</label>
+            <input type="text" id="text" name="text" placeholder="e.g. a specific technique or method" />
+            <p class="hint">Searches actual paper titles and abstracts, not just topic categories.</p>
+          </div>
+          <div class="field">
+            <label for="city">City</label>
+            <input type="text" id="city" name="city" />
+          </div>
+          <div class="field">
+            <label for="state">State</label>
+            <input type="text" id="state" name="state" />
+          </div>
+          <div class="field">
+            <label for="country">Country</label>
+            <input type="text" id="country" name="country" />
+          </div>
+        </div>
+      </details>
+
       <button type="submit">Search</button>
     </form>
 

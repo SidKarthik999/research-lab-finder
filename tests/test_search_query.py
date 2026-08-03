@@ -5,7 +5,8 @@ import pytest
 from backend.main import build_search_query
 
 FILTER_KWARGS = {
-    "q": "neuroscience",
+    "name": "Smith",
+    "text": "optogenetics",
     "institution": "Stanford",
     "city": "Palo Alto",
     "state": "California",
@@ -49,11 +50,22 @@ def test_offset_computed_from_page_and_limit():
     assert params[-2:] == [10, 20]
 
 
-def test_q_appears_in_where_and_ranking_params():
-    sql, params = build_search_query(q="optogenetics", limit=5)
-    assert "WHERE" in sql
-    assert params.count("optogenetics") == 3  # 2x text-rank ranking + 1x publication EXISTS match
-    assert "%optogenetics%" in params
+def test_name_filter_matches_professor_name_only():
+    sql, params = build_search_query(name="Smith", limit=5)
+    assert "Professor.name ILIKE" in sql
+    assert "%Smith%" in params
+    # name shouldn't feed the publication text-rank placeholders
+    assert params[0] is None and params[1] is None
+
+
+def test_text_filter_used_for_where_and_ranking():
+    sql, params = build_search_query(text="optogenetics", limit=5)
+    assert "EXISTS" in sql
+    assert "search_vector" in sql
+    # 2x text-rank ranking placeholders + 1x publication EXISTS match, all
+    # the raw term (not %-wrapped, since it's a tsquery input, not ILIKE)
+    assert params.count("optogenetics") == 3
+    assert "%optogenetics%" not in params
 
 
 def test_topic_filter_uses_exists_clause():
