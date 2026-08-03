@@ -240,16 +240,27 @@ def list_fields():
 
 
 @app.get("/api/topics")
-def list_topics(q: str | None = None, limit: int = Query(20, ge=1, le=100)):
+def list_topics(
+    q: str | None = None,
+    field: str | None = Query(None, description="Scope suggestions to topics under this field"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    conditions = []
+    params = []
+    if q:
+        conditions.append("name ILIKE %s")
+        params.append(f"%{q}%")
+    if field:
+        conditions.append("field = %s")
+        params.append(field)
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
     connection = get_connection()
     cursor = connection.cursor()
-    if q:
-        cursor.execute(
-            "SELECT DISTINCT name FROM ResearchTopic WHERE name ILIKE %s ORDER BY name LIMIT %s;",
-            [f"%{q}%", limit],
-        )
-    else:
-        cursor.execute("SELECT DISTINCT name FROM ResearchTopic ORDER BY name LIMIT %s;", [limit])
+    cursor.execute(
+        f"SELECT DISTINCT name FROM ResearchTopic {where_clause} ORDER BY name LIMIT %s;",
+        [*params, limit],
+    )
     topics = [row[0] for row in cursor.fetchall()]
     cursor.close()
     return {"topics": topics}

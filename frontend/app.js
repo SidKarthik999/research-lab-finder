@@ -8,12 +8,12 @@ const pageLabel = document.getElementById("page-label");
 const LIMIT = 20;
 let currentPage = 1;
 
-function setupAutocomplete(inputId, datalistId, apiPath) {
+function setupAutocomplete(inputId, datalistId, apiPath, extraParams = () => ({})) {
   const input = document.getElementById(inputId);
   const datalist = document.getElementById(datalistId);
   let debounceTimer;
 
-  input.addEventListener("input", () => {
+  function fetchSuggestions() {
     clearTimeout(debounceTimer);
     const value = input.value.trim();
     if (!value) {
@@ -22,7 +22,8 @@ function setupAutocomplete(inputId, datalistId, apiPath) {
     }
     debounceTimer = setTimeout(async () => {
       try {
-        const response = await fetch(`${apiPath}?q=${encodeURIComponent(value)}&limit=10`);
+        const params = new URLSearchParams({ q: value, limit: 10, ...extraParams() });
+        const response = await fetch(`${apiPath}?${params}`);
         if (!response.ok) return;
         const data = await response.json();
         const options = data.institutions || data.topics || [];
@@ -31,11 +32,22 @@ function setupAutocomplete(inputId, datalistId, apiPath) {
         // Autocomplete is a convenience, not critical -- fail silently.
       }
     }, 200);
-  });
+  }
+
+  input.addEventListener("input", fetchSuggestions);
+  return fetchSuggestions;
 }
 
 setupAutocomplete("institution", "institution-options", "/api/institutions");
-setupAutocomplete("topic", "topic-options", "/api/topics");
+
+const refreshTopicSuggestions = setupAutocomplete("topic", "topic-options", "/api/topics", () => {
+  const field = document.getElementById("field").value;
+  return field ? { field } : {};
+});
+
+// Re-scope suggestions immediately if the user picks a field after already
+// typing a topic, rather than waiting for their next keystroke.
+document.getElementById("field").addEventListener("change", refreshTopicSuggestions);
 
 async function loadFieldOptions() {
   const select = document.getElementById("field");
