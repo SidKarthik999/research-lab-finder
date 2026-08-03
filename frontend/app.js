@@ -110,14 +110,18 @@ function institutionDomain(url) {
 // Derived links -- computed on the fly from data already on hand, not
 // scraped or guessed. Google Scholar has no public "look up this exact
 // person" API, so this is a search link, same idea as the institution
-// directory link: it reliably gets a student *to* a place to look, even
-// when we don't have a direct URL stored.
-function scholarSearchUrl(name, institution) {
-  // Name alone is ambiguous (common names, or an author who isn't the top
-  // match) -- including the institution narrows this to the right person
-  // far more often.
-  const mauthors = institution ? `${name} ${institution}` : name;
-  const params = new URLSearchParams({ view_op: "search_authors", mauthors });
+// site-search link: it reliably gets a student *to* a place to look, even
+// when we don't have a direct URL stored. Neither one is a guaranteed
+// direct hit -- both still require a click to find the right result.
+function scholarSearchUrl(name) {
+  // Tried appending the institution to narrow ambiguous names, but Scholar's
+  // mauthors match appears to check it against the profile's own listed
+  // affiliation text -- if that doesn't literally match what we pass (an
+  // abbreviation, an old affiliation, etc.), it filters the person out
+  // entirely instead of narrowing correctly. Name alone is the version
+  // known to actually work; don't add institution back without a way to
+  // verify it doesn't regress real profiles like this one.
+  const params = new URLSearchParams({ view_op: "search_authors", mauthors: name });
   return `https://scholar.google.com/citations?${params}`;
 }
 
@@ -157,10 +161,10 @@ function renderResults(results) {
       professor.website && `<a href="${escapeHtml(professor.website)}" target="_blank" rel="noopener">Website</a>`,
       professor.orcid && `<a href="${escapeHtml(professor.orcid)}" target="_blank" rel="noopener">ORCID</a>`,
       professorName &&
-        `<a href="${escapeHtml(scholarSearchUrl(professorName, professor.institution_name))}" target="_blank" rel="noopener">Find on Google Scholar</a>`,
+        `<a href="${escapeHtml(scholarSearchUrl(professorName))}" target="_blank" rel="noopener">Find on Google Scholar</a>`,
       domain &&
         professorName &&
-        `<a href="${escapeHtml(directorySearchUrl(domain, professorName))}" target="_blank" rel="noopener">Search ${escapeHtml(professor.institution_name || "institution")} directory</a>`,
+        `<a href="${escapeHtml(directorySearchUrl(domain, professorName))}" target="_blank" rel="noopener">Search for ${escapeHtml(professorName)} on ${escapeHtml(professor.institution_name || "institution")}'s site</a>`,
     ]
       .filter(Boolean)
       .join(" &middot; ");
