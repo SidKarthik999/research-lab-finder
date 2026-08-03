@@ -12,7 +12,7 @@ credible email to a specific person who might say yes*."
 
 Every phase below is judged against that end-to-end path.
 
-## Where things stand (measured 2026-08-02, after Phase 1)
+## Where things stand (measured 2026-08-02, mid-Phase 2)
 
 | Table | Rows | Notes |
 |---|---|---|
@@ -25,11 +25,13 @@ Every phase below is judged against that end-to-end path.
 | `Lab` | 45 | hand-extracted pilot; Stanford + Cornell only |
 | `ProfessorLab` | 37 | |
 
-**Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text `q` matching over topics and publication full text, and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips and topic autocomplete. 33 new tests (172 total).
+**Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text search over topics and publication full text (split into `name`/`text`/`topic`/`field`, replacing an earlier combined `q` that turned out to conflate several unrelated things — see commit history), and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips, a Field dropdown, field-scoped topic autocomplete, and an Advanced search section. 137 new tests (309 total).
 
-One honest caveat: the phase's own "done when" example (`computational neuroscience` + `Texas`) currently returns zero results — not a search bug, but a coverage gap. Only 4 of the 100 ingested institutions are in Texas, and "computational neuroscience" as an exact phrase doesn't overlap with any of their professors' topics/abstracts. Broader combinations (e.g. `neuroscience` + `California`, which has many more ingested institutions) work as intended. This is precisely the gap Phase 3 (coverage) exists to close.
+One honest caveat from Phase 1: the phase's own "done when" example (`computational neuroscience` + `Texas`) currently returns zero results — not a search bug, but a coverage gap. Only 4 of the 100 ingested institutions are in Texas, and "computational neuroscience" as an exact phrase doesn't overlap with any of their professors' topics/abstracts. Broader combinations (e.g. `neuroscience` + `California`, which has many more ingested institutions) work as intended. This is precisely the gap Phase 3 (coverage) exists to close.
 
-Professor contact coverage: **0 emails, 0 websites**, 3,621 ORCIDs.
+**Phase 2 in progress**: `researcher_urls.py` backfilled `Professor.website` from ORCID's researcher-urls (653 of 3,621 ORCID holders had a usable one — most people don't add any). The frontend contact panel now also shows a Google Scholar author-search link and an institution-directory search link, both computed on the fly from data already on hand, no scraping. Still 0 emails — that piece of Phase 2 isn't started.
+
+Professor contact coverage: **0 emails, 653 websites** (up from 0), 3,621 ORCIDs.
 
 ### What's working
 
@@ -47,12 +49,12 @@ correctness.
 
 ### What blocks the goal
 
-1. **Search doesn't cover research fields.** `/api/search?q=` matches only
-   `Professor.name` and `Institution.name`. A student searching "neuroscience"
-   or "CRISPR" gets zero results. This is the single largest gap between the
-   current tool and the stated goal.
-2. **Nobody is contactable.** 0 of 4,431 professors have an email or a
-   website. Even a perfect search result dead-ends.
+1. ~~**Search doesn't cover research fields.**~~ **Fixed in Phase 1.**
+   `/api/search` now filters by topic/field and full-text publication search.
+2. **Contactability is partial.** 653 of 4,431 professors have a website
+   (via ORCID researcher-urls) and every result now has computed Scholar/
+   directory search links, but 0 have a stored email. Getting *to* a contact
+   page works; a direct email address still doesn't exist anywhere.
 3. **Coverage is the wrong slice.** Top-100 institutions × top-50 most-cited
    faculty is elite- and medicine-skewed — close to the *least* accessible
    population for an unknown student.

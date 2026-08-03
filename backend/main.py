@@ -133,6 +133,7 @@ def build_search_query(
         Professor.website,
         Professor.orcid,
         Institution.name AS institution_name,
+        Institution.website AS institution_website,
         Institution.city,
         Institution.state,
         Institution.country_code,

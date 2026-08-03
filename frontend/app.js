@@ -98,6 +98,30 @@ async function runSearch(page = 1) {
   updatePagination(data.results.length);
 }
 
+function institutionDomain(url) {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+// Derived links -- computed on the fly from data already on hand, not
+// scraped or guessed. Google Scholar has no public "look up this exact
+// person" API, so this is a search link, same idea as the institution
+// directory link: it reliably gets a student *to* a place to look, even
+// when we don't have a direct URL stored.
+function scholarSearchUrl(name) {
+  const params = new URLSearchParams({ view_op: "search_authors", mauthors: name });
+  return `https://scholar.google.com/citations?${params}`;
+}
+
+function directorySearchUrl(domain, name) {
+  const params = new URLSearchParams({ q: `site:${domain} ${name}` });
+  return `https://www.google.com/search?${params}`;
+}
+
 function renderResults(results) {
   if (results.length === 0) {
     statusEl.textContent = "No professors found. Try broadening your search.";
@@ -118,16 +142,28 @@ function renderResults(results) {
       ? `<p class="topics">${topics.map((topic) => `<span class="topic-chip">${escapeHtml(topic)}</span>`).join("")}</p>`
       : "";
 
+    const professorName = professor.professor_name || "";
+    const domain = institutionDomain(professor.institution_website);
+
+    const contactLinks = [
+      professor.email && `<a href="mailto:${escapeHtml(professor.email)}">Email</a>`,
+      professor.website && `<a href="${escapeHtml(professor.website)}" target="_blank" rel="noopener">Website</a>`,
+      professor.orcid && `<a href="${escapeHtml(professor.orcid)}" target="_blank" rel="noopener">ORCID</a>`,
+      professorName &&
+        `<a href="${escapeHtml(scholarSearchUrl(professorName))}" target="_blank" rel="noopener">Find on Google Scholar</a>`,
+      domain &&
+        professorName &&
+        `<a href="${escapeHtml(directorySearchUrl(domain, professorName))}" target="_blank" rel="noopener">Search ${escapeHtml(professor.institution_name || "institution")} directory</a>`,
+    ]
+      .filter(Boolean)
+      .join(" &middot; ");
+
     li.innerHTML = `
       <h2>${escapeHtml(professor.professor_name || "Unknown professor")}</h2>
       <p class="meta">${professor.institution_name ? escapeHtml(professor.institution_name) : "Institution unknown"}</p>
       ${location ? `<p class="meta">${escapeHtml(location)}</p>` : ""}
       ${topicsHtml}
-      <p class="meta">
-        ${professor.email ? `<a href="mailto:${escapeHtml(professor.email)}">Email</a>` : ""}
-        ${professor.website ? ` &middot; <a href="${escapeHtml(professor.website)}" target="_blank" rel="noopener">Website</a>` : ""}
-        ${professor.orcid ? ` &middot; <a href="${escapeHtml(professor.orcid)}" target="_blank" rel="noopener">ORCID</a>` : ""}
-      </p>
+      <p class="meta">${contactLinks}</p>
       <button type="button" class="publications-toggle" data-professor-id="${professor.id}">Show publications</button>
       <div class="publications" hidden></div>
     `;

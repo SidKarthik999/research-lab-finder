@@ -152,6 +152,19 @@ def update_professor_name(professor_id, name):
     connection.commit()
     cursor.close()
 
+def update_professor_website(professor_id, website):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET website = %s,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (website, professor_id))
+    connection.commit()
+    cursor.close()
+
 def clear_professor_orcid(professor_id):
     connection = get_connection()
     cursor = connection.cursor()
