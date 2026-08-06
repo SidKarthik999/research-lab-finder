@@ -51,4 +51,8 @@ dependencies:
       - fastapi==0.121.0
       - uvicorn==0.38.0
       - pytest==9.1.1
+      - argon2-cffi==25.1.0
+      - itsdangerous==2.2.0
+      - google-auth==2.56.3
+      - email-validator==2.3.0
 prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder

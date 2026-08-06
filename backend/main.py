@@ -5,19 +5,38 @@ at /. No LLM involved yet -- pure SQL filtering over the OpenAlex-sourced
 Postgres data. See CLAUDE.md for the data model.
 
 Institution, Professor, Publication, and (as of Phase 1) ResearchTopic
-exist. Lab is also live but not yet surfaced here.
+exist. Lab is also live but not yet surfaced here. Accounts (Phase 5A)
+are handled by backend/auth.py, mounted below.
 
 Run from the repo root: uvicorn backend.main:app --reload
 """
 
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
+from backend.auth import router as auth_router
 from src.database import get_connection
 
+load_dotenv()
+
 app = FastAPI(title="Research Lab Finder API")
+
+# https_only requires ENV=production (and therefore HTTPS) to be set --
+# never enforced in local dev, where the app is served over plain HTTP.
+# SESSION_SECRET has no default: a missing one fails loudly at startup
+# rather than silently signing cookies with a guessable key.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ["SESSION_SECRET"],
+    same_site="lax",
+    https_only=os.environ.get("ENV") == "production",
+)
+app.include_router(auth_router)
 
 
 def build_search_query(

@@ -459,3 +459,243 @@ def get_publications_for_professor(professor_id):
     publications = cursor.fetchall()
     cursor.close()
     return publications
+
+def get_user_by_email(email):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, email, email_verified, name, avatar_url
+    FROM AppUser
+    WHERE email = %s;
+    '''
+    cursor.execute(query, (email,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def get_user_by_id(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, email, email_verified, name, avatar_url
+    FROM AppUser
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def insert_user(email, name=None, avatar_url=None, email_verified=False):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO AppUser (
+        email,
+        name,
+        avatar_url,
+        email_verified
+    )
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (email)
+    DO UPDATE SET
+        name = COALESCE(EXCLUDED.name, AppUser.name),
+        avatar_url = COALESCE(EXCLUDED.avatar_url, AppUser.avatar_url),
+        email_verified = AppUser.email_verified OR EXCLUDED.email_verified,
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query, (email, name, avatar_url, email_verified))
+    user_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return user_id
+
+def mark_user_email_verified(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE AppUser
+    SET email_verified = TRUE,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (user_id,))
+    connection.commit()
+    cursor.close()
+
+def get_auth_identity(provider, provider_user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, user_id, provider, provider_user_id, password_hash
+    FROM AuthIdentity
+    WHERE provider = %s AND provider_user_id = %s;
+    '''
+    cursor.execute(query, (provider, provider_user_id))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def get_identities_for_user(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT provider, provider_user_id, created_at
+    FROM AuthIdentity
+    WHERE user_id = %s;
+    '''
+    cursor.execute(query, (user_id,))
+    identities = cursor.fetchall()
+    cursor.close()
+    return identities
+
+def insert_auth_identity(user_id, provider, provider_user_id, password_hash=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    # On conflict, only bump updated_at -- never reassign user_id or touch
+    # password_hash here. Google sign-in calls this on every login, so it
+    # must be idempotent, but silently repointing an existing identity at a
+    # different user_id (or clobbering a password hash) on a routine login
+    # call would be an account-takeover-shaped bug. Password changes go
+    # through update_identity_password instead.
+    query = '''
+    INSERT INTO AuthIdentity (
+        user_id,
+        provider,
+        provider_user_id,
+        password_hash
+    )
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (provider, provider_user_id)
+    DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id;
+    '''
+    cursor.execute(query, (user_id, provider, provider_user_id, password_hash))
+    identity_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return identity_id
+
+def update_identity_password(identity_id, password_hash):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE AuthIdentity
+    SET password_hash = %s,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (password_hash, identity_id))
+    connection.commit()
+    cursor.close()
+
+def get_student_profile(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for
+    FROM StudentProfile
+    WHERE user_id = %s;
+    '''
+    cursor.execute(query, (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def upsert_student_profile(user_id, level=None, school=None, graduation_year=None, coursework=None, skills=None, prior_experience=None, looking_for=None):
+    connection = get_connection()
+    cursor = connection.cursor()
+    # Full replace (EXCLUDED, not COALESCE) on conflict -- unlike the
+    # OpenAlex-ingest upserts above, this is the student directly editing
+    # their own form, so a field they clear should actually clear rather
+    # than keep the old stored value.
+    query = '''
+    INSERT INTO StudentProfile (
+        user_id,
+        level,
+        school,
+        graduation_year,
+        coursework,
+        skills,
+        prior_experience,
+        looking_for
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+        level = EXCLUDED.level,
+        school = EXCLUDED.school,
+        graduation_year = EXCLUDED.graduation_year,
+        coursework = EXCLUDED.coursework,
+        skills = EXCLUDED.skills,
+        prior_experience = EXCLUDED.prior_experience,
+        looking_for = EXCLUDED.looking_for,
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING user_id;
+    '''
+    cursor.execute(query, (user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for))
+    returned_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return returned_id
+
+def insert_email_draft(user_id, professor_id, body):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO EmailDraft (
+        user_id,
+        professor_id,
+        body
+    )
+    VALUES (%s, %s, %s)
+    RETURNING id;
+    '''
+    cursor.execute(query, (user_id, professor_id, body))
+    draft_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return draft_id
+
+def get_email_drafts_for_professor(user_id, professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, body, created_at
+    FROM EmailDraft
+    WHERE user_id = %s AND professor_id = %s
+    ORDER BY created_at DESC;
+    '''
+    cursor.execute(query, (user_id, professor_id))
+    drafts = cursor.fetchall()
+    cursor.close()
+    return drafts
+
+def get_professor_ai_summary(professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT ai_summary, ai_summary_generated_at
+    FROM Professor
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (professor_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def update_professor_ai_summary(professor_id, summary):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET ai_summary = %s,
+        ai_summary_generated_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (summary, professor_id))
+    connection.commit()
+    cursor.close()
