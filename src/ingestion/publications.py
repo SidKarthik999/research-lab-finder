@@ -11,22 +11,17 @@ was queried for it.
 Run from the repo root: python -m src.ingestion.publications
 """
 
-import os
 import re
 
 import pyalex
-from dotenv import load_dotenv
 
+import src.ingestion.openalex_client  # noqa: F401 -- import for its config/session-hardening side effects
 from src.database import (
     close_connection,
-    get_professors_for_publication_ingestion,
+    get_professors_without_publications,
     insert_professor_publication,
     insert_publication,
 )
-
-load_dotenv()
-
-pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
 
 
 TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -96,17 +91,51 @@ def ingest_publications_for_professor(professor_id, openalex_author_id, limit=10
     return inserted
 
 
-def ingest_all_publications(limit_per_professor=10):
-    professors = get_professors_for_publication_ingestion()
+def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
+    """Only pulls professors with zero ProfessorPublication rows so far --
+    each professor here costs one paid, filtered-list OpenAlex request (not
+    a free single-record view), so a resumed/rerun call must not re-spend
+    that on professors already done. See the institution-ingestion skip
+    logic in openalex.py (get_professors_by_institution check) for the same
+    reasoning applied there after a real run wasted quota re-walking
+    already-finished institutions.
+
+    Each professor is one atomic request (get_works_for_professor fetches
+    all of that professor's works in a single call), so professors are
+    naturally finished one at a time in order -- never interleaved.
+
+    Stops early after max_consecutive_failures in a row, on the assumption
+    the daily budget/prepaid balance just ran out (the same 429 signal
+    covers both -- OpenAlex gives no separate "which one" indicator).
+    Without this, a budget-exhausted run would otherwise burn through
+    every remaining professor one by one, each paying the full bounded
+    retry+backoff delay before failing, for no benefit -- intended to be
+    re-run daily (e.g. via a scheduled job) against whatever's left,
+    letting each day's free budget pick up where the last one stopped.
+    A real success anywhere resets the counter, so an isolated one-off
+    failure (a single professor's data issue, not sustained throttling)
+    doesn't prematurely abort a run that still has budget left.
+    """
+    professors = get_professors_without_publications()
     total = 0
+    consecutive_failures = 0
 
     for professor_id, name, openalex_id in professors:
         try:
             count = ingest_publications_for_professor(professor_id, openalex_id, limit=limit_per_professor)
             print(f"{name}: {count} publication(s)")
             total += count
+            consecutive_failures = 0
         except Exception as e:
             print(f"Failed {name}: {e}")
+            consecutive_failures += 1
+            if consecutive_failures >= max_consecutive_failures:
+                print(
+                    f"Stopping after {consecutive_failures} consecutive failures "
+                    "-- likely out of budget for today. Re-run tomorrow to pick up "
+                    "where this left off."
+                )
+                break
 
     return total
 

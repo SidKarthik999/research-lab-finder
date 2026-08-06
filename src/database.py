@@ -204,6 +204,38 @@ def get_professors_for_publication_ingestion():
     cursor.close()
     return professors
 
+def get_professors_without_publications():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, name, openalex_id
+    FROM Professor
+    WHERE openalex_id IS NOT NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM ProfessorPublication WHERE ProfessorPublication.professor_id = Professor.id
+    )
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    return professors
+
+def get_professors_without_topics():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, name, openalex_id
+    FROM Professor
+    WHERE openalex_id IS NOT NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM ProfessorTopic WHERE ProfessorTopic.professor_id = Professor.id
+    )
+    '''
+    cursor.execute(query)
+    professors = cursor.fetchall()
+    cursor.close()
+    return professors
+
 def insert_publication(title, abstract=None, publication_date=None, journal=None, doi=None, url=None, source=None, openalex_id=None):
     connection = get_connection()
     cursor = connection.cursor()

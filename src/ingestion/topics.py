@@ -15,21 +15,15 @@ ordered most-relevant-first. That count is stored as ProfessorTopic.works_count.
 Run from the repo root: python -m src.ingestion.topics
 """
 
-import os
-
 import pyalex
-from dotenv import load_dotenv
 
+import src.ingestion.openalex_client  # noqa: F401 -- import for its config/session-hardening side effects
 from src.database import (
     close_connection,
-    get_professors_for_publication_ingestion,
+    get_professors_without_topics,
     insert_professor_topic,
     insert_research_topic,
 )
-
-load_dotenv()
-
-pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
 
 
 def get_author_topics(openalex_author_id):
@@ -59,22 +53,42 @@ def insert_topics_for_professor(professor_id, openalex_author_id):
     return len(topics)
 
 
-def insert_topics_from_professors(professors):
+def insert_topics_from_professors(professors, max_consecutive_failures=5):
+    """Stops early after max_consecutive_failures in a row, on the assumption
+    the daily budget/prepaid balance just ran out -- see the same guard in
+    publications.py's ingest_all_publications() for the full reasoning.
+    A real success anywhere resets the counter.
+    """
     professors_processed = 0
+    consecutive_failures = 0
     for professor_id, name, openalex_id in professors:
         try:
             topic_count = insert_topics_for_professor(professor_id, openalex_id)
             print(f"Inserted {topic_count} topics for {name}")
             professors_processed += 1
+            consecutive_failures = 0
 
         except Exception as e:
             print(f"Failed {name}: {e}")
+            consecutive_failures += 1
+            if consecutive_failures >= max_consecutive_failures:
+                print(
+                    f"Stopping after {consecutive_failures} consecutive failures "
+                    "-- likely out of budget for today. Re-run tomorrow to pick up "
+                    "where this left off."
+                )
+                break
 
     return professors_processed
 
 
 if __name__ == "__main__":
-    professors = get_professors_for_publication_ingestion()
+    # get_professors_without_topics() skips anyone with an existing
+    # ProfessorTopic row so a resumed/rerun call doesn't redo work -- these
+    # are free single-record OpenAlex views (not paid filtered-list
+    # requests like publications.py), but still no reason to waste the
+    # request/time budget re-fetching professors already done.
+    professors = get_professors_without_topics()
 
     insert_topics_from_professors(professors)
 
