@@ -1,6 +1,13 @@
 # Research Lab Finder — Roadmap
 
-**Last updated:** 2026-08-01
+**Last updated:** 2026-08-06
+
+> **Next up: Phase 5A** (professor profiles, AI summaries, cold emails, and
+> Google sign-in). Promoted ahead of Phases 3 and 4 on 2026-08-06 — see
+> "Suggested order" for why. Phase numbers are deliberately *not* renumbered:
+> several code comments (`src/ingestion/openalex.py`, migration headers)
+> already cite phase numbers, and silently shifting them would make those
+> comments point at the wrong thing.
 
 ## The goal
 
@@ -57,11 +64,17 @@ correctness.
    every result has computed Scholar/institution search links regardless.
    Most professors still won't have a direct email — that's a real ceiling
    of "what's legitimately public," not a to-do item.
-3. **Coverage is the wrong slice.** Top-100 institutions × top-50 most-cited
+3. **Finding the right person isn't the same as being able to approach
+   them.** A result card is a name, an institution, and three topic chips.
+   A student who lands on the right professor still has to work out who they
+   are, whether their work is actually a fit, and what to say — which is the
+   step most of them stall on. This is what Phase 5A addresses, and it's now
+   the top of the critical path.
+4. **Coverage is the wrong slice.** Top-100 institutions × top-50 most-cited
    faculty is elite- and medicine-skewed — close to the *least* accessible
    population for an unknown student.
-4. **Labs don't scale.** 45 rows from two hand-pasted directory pages.
-5. **No opportunity signal.** Nothing records whether a PI or program actually
+5. **Labs don't scale.** 45 rows from two hand-pasted directory pages.
+6. **No opportunity signal.** Nothing records whether a PI or program actually
    takes students, which is the fact a student most needs.
 
 ---
@@ -152,7 +165,7 @@ Instead:
   where the address itself isn't stored.
 - **Later, optional:** per-institution directory adapters for the subset of
   schools that permit automated access, robots.txt-respecting, sharing one
-  `directory.py` interface. Worth it only if Phase 5 shows outreach is the
+  `directory.py` interface. Worth it only if Phase 5A shows outreach is the
   actual bottleneck.
 
 ---
@@ -199,54 +212,317 @@ and Works-derived labs are exactly what was rolled back).
 
 ---
 
-## Phase 5 — The differentiator: opportunities and outreach
+## Phase 5A — Profiles, AI summaries, and cold emails ← **next up**
 
-Everything above builds a good directory. This is what makes it a *tool*.
+Everything above builds a good directory. This is what makes it a *tool*, and
+it's the shortest remaining path to the goal stated at the top: *I have sent a
+credible email to a specific person who might say yes.* Phases 3 and 4 make
+the directory bigger; this one makes it act.
 
-**Consider promoting this above Phase 4.** High school students overwhelmingly
-get research through structured programs — REUs, summer institutes, formal
-mentorship schemes — not cold emails to R1 PIs. For that half of the audience,
-the opportunity layer matters more than lab coverage does.
+**Professor detail view.** Today a professor is a card in a result list.
+Give each one a real page — reachable by clicking the card, with its own URL
+so it can be bookmarked and shared — showing institution and location, the
+full topic list (not just 3 chips), the contact panel, and their publications
+without a separate "show" click.
+
+**`/api/professors/{id}/summary`** — a plain-language paragraph on who this
+person is and what they work on, generated from their name, institution,
+topics, and the titles/abstracts of their most-cited and most-recent papers.
+
+- **Cache it in a column** (`Professor.ai_summary` + a generated-at
+  timestamp). Generate lazily on first view rather than for all 4,431
+  professors at ingest: most professors will never be viewed, the data is
+  stable once written, and a per-request call would put an external API in
+  the hot path of a page load.
+- Ground it strictly in the rows passed in, and say plainly in the UI that
+  it's AI-generated from public publication data. Same principle as
+  everywhere else in this project: **absent beats wrong**, and a confident
+  hallucination about a real named academic is the worst failure mode this
+  product has.
+
+**Accounts.** The cold email needs to brag about the student, which means the
+student's details have to live somewhere: a `StudentProfile` filled in once
+(level, school, coursework, skills/techniques, prior projects, what they're
+looking for) and reused for every draft.
+
+Auth is **multi-provider from day one** — "Continue with Google" alongside
+ordinary email-and-password, and room for Apple/Microsoft/GitHub later
+without a migration. That means the account and the login method are
+*separate* records: one `AppUser` row, one `AuthIdentity` row per method,
+so the same person signing in with Google today and a password tomorrow
+lands in one account rather than two.
+
+Two rules that are easy to get wrong and expensive to fix:
+
+- **Link accounts only on a provider-*verified* email.** Auto-linking an
+  unverified one is a known account-takeover path: an attacker registers a
+  password account under someone else's address, that person later signs in
+  with Google, and the two get merged into the attacker's account.
+- **A student's own profile text goes into a prompt.** Treat it as untrusted
+  input for prompt-injection purposes, and never let it reach an endpoint
+  that acts on its own output.
+
+**`/api/professors/{id}/cold-email`** — a draft grounded in *both* sides:
+the student's profile and the professor's *recent* work specifically, so it
+reads as written by someone who actually read a paper rather than
+mass-mailed. Editable in the browser before it's sent; the app drafts, the
+student sends.
+
+**Frontend groundwork, done as part of 5A rather than after it.** This phase
+roughly triples the frontend (detail page, sign-in, signup, profile form,
+email composer, account menu). Three things are much cheaper to do while
+writing those screens than to retrofit across all of them:
+
+- **Missing style primitives.** `style.css` is already token-driven and
+  handles dark mode, but it has one button style (`.publications-toggle`
+  fakes a secondary by overriding `background`), no `textarea`, no error or
+  success styling, and no header bar with room for account state. Add a
+  spacing/type scale and those primitives up front, or five screens each
+  invent their own and drift. This is *not* the redesign — see Phase 5C.
+- **An `el(tag, attrs, ...children)` DOM helper** replacing the
+  `innerHTML` + template-literal + hand-called `escapeHtml()` pattern.
+  That pattern is correct today only because every interpolation
+  remembered to escape; 5A introduces genuinely user-controlled strings
+  (display names, profile text, model output) where today nearly
+  everything comes from OpenAlex. Building nodes with `textContent`
+  removes the whole class of bug instead of reducing it.
+- **Split `app.js` into ES modules** (`api.js`, `session.js`, `router.js`,
+  `views/`) using native `<script type="module">`. 255 lines is fine; ~800
+  with six views and auth state is not.
+
+**Done when** a signed-in student can go from a search result to a specific
+professor's page, read a summary that's accurate, and copy out an email that
+names a real paper and a real reason they're a fit.
+
+Per `CLAUDE.md`: these are new `/api/*` endpoints, and they stay opt-in from
+the frontend so the core search flow keeps zero external dependencies and no
+added latency for signed-out users.
+
+---
+
+## Phase 5B — Opportunities
+
+The other half of the original Phase 5, still worth doing but not blocking
+5A. High school students overwhelmingly get research through structured
+programs — REUs, summer institutes, formal mentorship schemes — not cold
+emails to R1 PIs. For that half of the audience, this layer matters more than
+lab coverage does.
 
 - **`Opportunity` table**: NSF REU sites, institution summer research
   programs, department-level undergraduate research listings. Fields for
   eligibility (high school / undergrad), deadline, location, paid/unpaid,
   and a link. This is the data students most need and that no OpenAlex-derived
   directory can provide.
-- **Student profile**: interests, level, location radius → ranked matches
-  across both professors and opportunities.
-- **`/api/professors/{id}/summary`** — a plain-language "what this lab works
-  on," generated from the professor's top publication abstracts. **Cache it in
-  a column**, generated once at ingest time, not per request: it's stable
-  data, and per-request generation would put an external API in the hot path.
-- **`/api/professors/{id}/cold-email`** — a draft grounded in the student's
-  profile and the professor's *recent* work, so it reads as specific rather
-  than mass-mailed.
-
-Per `CLAUDE.md`: both are new `/api/*` endpoints, and both stay opt-in from
-the frontend so the core search flow keeps zero external dependencies and no
-added latency.
+- **Ranked matches** across both professors and opportunities, using the
+  `StudentProfile` that Phase 5A already introduces — interests, level,
+  location radius.
 
 ---
 
-## Phase 6 — Productization
+## Phase 5C — Visual redesign
 
-- Deploy: managed Postgres + a single container serving the FastAPI app and
-  static frontend (the current single-origin setup already makes this simple).
-- Scheduled refresh of the ingestion pipeline, with per-stage logging so a
-  partial failure is visible rather than silent.
-- Saved searches and "email me new matches in my field near me" — the feature
-  that makes students return rather than visit once.
+Not a priority, and deliberately scheduled **after** 5A rather than before or
+during it. The reasoning, so this doesn't get relitigated:
+
+- 5A roughly triples the number of screens. Art-directing three screens now
+  means redoing it once the other five exist and don't fit the system.
+- The markup lives in template literals inside `app.js`. A redesign that
+  changes structure means editing those; doing it once, after every screen
+  exists, is the entire saving.
+- `style.css` isn't a mess to escape from — 186 lines, custom properties,
+  dark mode, bare-element selectors that new markup inherits from for free.
+  There's no cleanup pressure forcing the issue early.
+
+The primitives (spacing/type scale, button variants, form and error styles,
+header bar) land in 5A because five screens need them regardless. 5C is the
+identity work on top: typography with actual personality, colour beyond one
+accent blue, result-card and detail-page art direction, landing page.
+
+**Stay vanilla — no framework, and don't bundle that decision into the
+redesign.** Restyling and re-architecting simultaneously means a breakage
+can't be attributed to either one.
+
+- A build step is the real cost. Today `uvicorn backend.main:app` serves API
+  and UI from one process on one origin with no `node_modules` and no
+  bundler, and Phase 6 assumes exactly that ("a single container serving the
+  FastAPI app and static frontend"). A bundler makes that plan meaningfully
+  harder for a frontend measured in hundreds of lines.
+- **The switch signal is not line count.** It's manually re-rendering the
+  same DOM from three different places and getting stale-UI bugs — the
+  header still reads "Sign in" after login, the profile form shows stale
+  values. That's when hand-rolled state stops being cheaper than a
+  framework.
+- **If that happens**, vendor Preact + htm as a single ES module file into
+  `frontend/` — components and real diffing, still no build step, still one
+  process. The 5A module split is what makes that an incremental migration
+  rather than a rewrite, which is why it's worth doing now.
+
+---
+
+## Phase 6 — Ship it
+
+Everything above assumes `localhost`. This phase is what stands between that
+and a URL a student can open. The architecture is already close — one process
+serving API and UI on one origin — so most of the work is configuration,
+guardrails, and a handful of specific code changes that only matter once the
+database is somewhere else.
+
+### 6.1 — Code changes that block deployment
+
+These are prerequisites, not polish. Nothing can deploy until they're done.
+
+- **`get_connection()` cannot reach a remote database.** It hardcodes
+  `dbname` and `user` with no host, port, or password, relying on local
+  peer/trust auth. Replace with a `DATABASE_URL` env var (falling back to
+  today's local values so nothing breaks in development).
+- **Connection handling won't survive a managed instance.** The current
+  function caches one connection per thread in a `threading.local` and
+  reuses it forever. That's fine against local Postgres, and wrong against
+  a hosted one for two reasons: FastAPI runs sync endpoints in a threadpool
+  (~40 threads by default), so the app can hold ~40 permanent connections
+  against a plan that may cap at 20; and managed providers drop idle
+  connections, after which a cached handle can fail on next use without
+  `connection.closed` having flipped. Replace with `psycopg_pool.ConnectionPool`,
+  opened and closed in a FastAPI lifespan handler, with a bounded size and
+  liveness check on checkout.
+- **Secrets come from the environment, not a file.** `.env` + `python-dotenv`
+  stays for local dev; production reads `DATABASE_URL`, `ANTHROPIC_API_KEY`,
+  `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, and the email-provider key from the
+  platform's secret store. Fail loudly at startup if any are missing rather
+  than at first request.
+- **Session cookies need production flags** — `Secure`, `HttpOnly`,
+  `SameSite=Lax` — set from an `ENV`/`DEBUG` flag so local HTTP still works.
+- **The migration path has never been run against an empty database.**
+  `001_initial_schema.sql` was written to be a safe no-op against the
+  already-live schema, which means the from-scratch case is untested. Verify
+  by creating a throwaway database and running `python -m database.migrate`
+  into it before trusting it as the deploy step.
+- **`/healthz`** returning 200 only if a database query succeeds, so the
+  platform restarts a container that's up but can't serve.
+
+### 6.2 — Hosting shape
+
+- **Managed Postgres** (Neon, Supabase, Render, or Fly Postgres). The dataset
+  is small — ~4.4k professors, ~34k publications — so the cheapest tier is
+  genuinely sufficient; this is not a scale problem. Migrate with `pg_dump`
+  from local and `psql` restore into the managed instance.
+- **One container** running `uvicorn backend.main:app`, serving `/api/*` and
+  mounting `frontend/` at `/`. No CORS, no separate static host, no CDN
+  needed at this size. Render or Fly.io both do container + managed Postgres
+  with the least ceremony; a plain VPS also works and is cheaper if you don't
+  mind owning TLS renewal.
+- **A real domain with TLS.** Not optional: Google OAuth requires registered
+  authorized origins and redirect URIs, and `Secure` cookies require HTTPS.
+- **Deploy = build image → run `python -m database.migrate` as a release
+  step → start the server.** Migrations run before the new code serves
+  traffic, which the numbered additive-migration design already supports.
+- **Automated backups**, either the provider's point-in-time recovery or a
+  scheduled `pg_dump`. The publication and topic data cost real API time to
+  collect and is not quickly reproducible.
+
+### 6.3 — Where the ingestion pipeline runs
+
+The enrichment pipeline currently runs as three launchd agents on a personal
+Mac (`launchd/*.plist`), which stops working the moment the database moves.
+Two options, and the cheap one is fine for a long time:
+
+- **Keep it local, pointed at the production database** via `DATABASE_URL`.
+  Zero new infrastructure, and it preserves the rate-limit circuit breakers
+  and daily-resume scheduling already tuned in those plists. Downside: it
+  only runs when that machine is on.
+- **Move to platform cron** (Render cron jobs, Fly scheduled machines, or
+  GitHub Actions on a schedule) once that becomes annoying — the scripts are
+  already independent module entry points, so this is a scheduling change,
+  not a rewrite.
+
+Either way, add per-stage logging so a partial failure is visible rather than
+silent.
+
+### 6.4 — Guardrails before real users
+
+The LLM endpoints from Phase 5A change the risk profile. Without limits, one
+user or one script can spend real money on your API key.
+
+- **Per-user daily cap on cold-email generation**, enforced server-side.
+  Summaries are naturally bounded because they cache after first view; email
+  drafting is not.
+- **A monthly spend alert** on the Anthropic account, so a runaway loop is
+  discovered by a notification rather than an invoice.
+- **Rate limits on auth endpoints** (login, signup, password reset) by IP and
+  by email, which the Phase 5A design already calls for.
+- **Treat email drafting as a spam vector.** It generates persuasive
+  messages addressed to real named academics. Requiring an account plus a
+  daily cap plus keeping the send action manual (the app drafts, the student
+  sends) is the mitigation — do not add a "send for me" button.
+
+### 6.5 — Trust, and the fact that this app is about real people
+
+Every row is a real named academic who did not sign up for this. The data is
+public and properly attributed, but shipping to strangers raises obligations
+that a localhost prototype doesn't have.
+
+- **Privacy policy and terms**, covering what's stored for accounts and what
+  the AI features do with a student's profile text.
+- **State the data provenance on-site** — OpenAlex and ORCID, both public —
+  and label AI-generated text as generated, per the principle below.
+- **A working contact path for correction or removal requests** from a
+  professor who asks. Small, but it's the difference between a defensible
+  project and an awkward email you have no process for.
+
+### 6.6 — Knowing when it breaks
+
+- Error reporting (Sentry's free tier is sufficient) so failures surface
+  without reading logs.
+- An uptime check against `/healthz`.
+- CI running `python -m pytest` on push. The suite is already meaningful and
+  is worth having gate a deploy.
+
+### 6.7 — Rough running cost
+
+Small hosting tier plus small managed Postgres lands around **$0–25/month**
+at this stage; several providers have free tiers this dataset fits inside.
+The variable is LLM usage — roughly **$0.02 per professor summary**, paid
+once each thanks to caching, plus per-draft email cost. The caps in 6.4 are
+what keep that bounded.
+
+**Done when** a student who has never met you can open a URL, search, sign
+in, and get an email draft — and when you'd find out it was broken without a
+user telling you.
+
+### Later, once people actually return
+
+- Saved searches and "email me new matches in my field near me" — the
+  feature that turns a one-time visit into a returning user. Worth building
+  after there's evidence people come back at all.
 
 ---
 
 ## Suggested order
 
-1. **Phase 0** — before anything else touches the schema.
-2. **Phase 1** — largest gap, lowest risk, no new attribution logic.
-3. **Phase 2** — otherwise Phase 1's better results still dead-end.
-4. **Phase 3** — broadens reach once the core loop works end to end.
-5. **Phase 5 before Phase 4**, if the high school audience is a priority.
+1. ~~**Phase 0**~~ — done.
+2. ~~**Phase 1**~~ — done.
+3. ~~**Phase 2**~~ — done.
+4. **Phase 5A** — *current*. Search and contactability both work now, so the
+   remaining gap on the critical path isn't reach, it's that a student who
+   finds the right professor still has to figure out who they are and what to
+   say. Phases 3 and 4 scale a funnel that doesn't yet close; this closes it.
+   It's also the cheapest test of whether the end-to-end idea works at all —
+   if the generated emails aren't credible, that's worth learning before
+   ingesting another 900 institutions.
+5. **Phase 3** — broadens reach once the loop works end to end.
+6. **Phase 5B before Phase 4**, if the high school audience is a priority.
+7. **Phase 5C** — whenever. It's not on the critical path and blocks
+   nothing, but it should follow 5A rather than precede it.
+8. **Phase 6** — can come as early as right after 5A; it does not require
+   Phase 3's wider coverage or Phase 4's labs. Shipping a narrower product
+   to real users teaches more than either.
+
+Two caveats on ordering within Phase 6. The **6.1 code changes are cheaper
+during 5A than after it** — `DATABASE_URL` and the connection pool touch
+`get_connection()`, which every new endpoint in 5A will call, and the cookie
+flags are set where 5A creates the session. Do those two alongside 5A even if
+the deploy itself waits. Everything else in Phase 6 genuinely can wait until
+you're ready to ship.
 
 ## Principles carried forward
 
@@ -259,3 +535,8 @@ added latency.
   ingestion stage.
 - **Bulk ingestion uses per-item try/except** so one bad record never aborts a
   batch.
+- **Generated text is grounded in stored rows, and labeled as generated.**
+  The "absent beats wrong" rule doesn't get suspended because an LLM wrote
+  it. Every AI summary or email draft is built only from data already in the
+  database, is shown to the user as AI-generated, and is editable before it
+  goes anywhere. The app drafts; the student sends.
