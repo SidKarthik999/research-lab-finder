@@ -1,12 +1,14 @@
 """FastAPI search backend for Research Lab Finder.
 
 Serves the search API under /api/* and the static frontend (../frontend)
-at /. No LLM involved yet -- pure SQL filtering over the OpenAlex-sourced
-Postgres data. See CLAUDE.md for the data model.
+at /. The search path itself (/api/search and friends) is pure SQL
+filtering, no LLM involved -- see CLAUDE.md for the data model.
 
 Institution, Professor, Publication, and (as of Phase 1) ResearchTopic
 exist. Lab is also live but not yet surfaced here. Accounts (Phase 5A)
-are handled by backend/auth.py, mounted below.
+are handled by backend/auth.py, mounted below. Professor detail and the
+cached AI summary (also Phase 5A) are the one place this file calls an
+LLM -- see backend/llm.py.
 
 Run from the repo root: uvicorn backend.main:app --reload
 """
@@ -15,11 +17,13 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import router as auth_router
+from backend.llm import SummaryGenerationNotConfigured, SummaryGenerationRefused, generate_summary
+from src import database as db
 from src.database import get_connection
 
 load_dotenv()
@@ -280,6 +284,127 @@ def list_topics(
     topics = [row[0] for row in cursor.fetchall()]
     cursor.close()
     return {"topics": topics}
+
+
+def _fetch_professor_topics(cursor, professor_id, limit=None):
+    query = """
+        SELECT ResearchTopic.name, ResearchTopic.field, ResearchTopic.subfield, ProfessorTopic.works_count
+        FROM ProfessorTopic
+        JOIN ResearchTopic ON ResearchTopic.id = ProfessorTopic.topic_id
+        WHERE ProfessorTopic.professor_id = %s
+        ORDER BY ProfessorTopic.works_count DESC NULLS LAST
+    """
+    params = [professor_id]
+    if limit is not None:
+        query += " LIMIT %s"
+        params.append(limit)
+    cursor.execute(query, params)
+    columns = [desc.name for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=8):
+    # Separate from professor_publications()'s query below because that one
+    # is for the reading-list display and doesn't need abstract; this one
+    # feeds the summary prompt and does. Ordered by recency, not citation
+    # count -- Publication has no stored citation count to rank by.
+    cursor.execute(
+        """
+        SELECT Publication.title, Publication.abstract, Publication.publication_date
+        FROM Publication
+        JOIN ProfessorPublication ON ProfessorPublication.publication_id = Publication.id
+        WHERE ProfessorPublication.professor_id = %s
+        ORDER BY Publication.publication_date DESC NULLS LAST
+        LIMIT %s;
+        """,
+        [professor_id, limit],
+    )
+    columns = [desc.name for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+@app.get("/api/professors/{professor_id}")
+def professor_detail(professor_id: int):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT
+            Professor.id,
+            Professor.name AS professor_name,
+            Professor.email,
+            Professor.website,
+            Professor.orcid,
+            Professor.ai_summary,
+            Professor.ai_summary_generated_at,
+            Institution.name AS institution_name,
+            Institution.website AS institution_website,
+            Institution.city,
+            Institution.state,
+            Institution.country_code
+        FROM Professor
+        LEFT JOIN Institution ON Institution.id = Professor.institution_id
+        WHERE Professor.id = %s;
+        """,
+        [professor_id],
+    )
+    row = cursor.fetchone()
+    if row is None:
+        cursor.close()
+        raise HTTPException(status_code=404, detail="Professor not found")
+
+    columns = [desc.name for desc in cursor.description]
+    professor = dict(zip(columns, row))
+    professor["topics"] = _fetch_professor_topics(cursor, professor_id)
+    cursor.close()
+    return professor
+
+
+@app.post("/api/professors/{professor_id}/summary")
+def professor_summary(professor_id: int):
+    # get_professor_ai_summary returns None only when the professor row
+    # itself doesn't exist -- a professor with no summary yet still comes
+    # back as (None, None), which is what triggers generation below.
+    cached = db.get_professor_ai_summary(professor_id)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Professor not found")
+
+    summary, generated_at = cached
+    if summary is not None:
+        return {"summary": summary, "generated_at": generated_at, "cached": True}
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT Professor.name, Institution.name
+        FROM Professor
+        LEFT JOIN Institution ON Institution.id = Professor.institution_id
+        WHERE Professor.id = %s;
+        """,
+        [professor_id],
+    )
+    name, institution_name = cursor.fetchone()
+    topics = _fetch_professor_topics(cursor, professor_id, limit=8)
+    publications = _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=8)
+    cursor.close()
+
+    if not topics and not publications:
+        # Nothing to ground a summary in -- generating one anyway risks
+        # inventing detail about a real named academic. Absent beats
+        # wrong; see CLAUDE.md / docs/ROADMAP.md Phase 5A.
+        return {"summary": None, "generated_at": None, "cached": False, "reason": "insufficient_data"}
+
+    try:
+        summary_text = generate_summary(name, institution_name, topics, publications)
+    except SummaryGenerationNotConfigured:
+        raise HTTPException(status_code=503, detail="AI summaries are not configured yet.")
+    except SummaryGenerationRefused:
+        raise HTTPException(status_code=502, detail="Couldn't generate a summary for this professor.")
+
+    db.update_professor_ai_summary(professor_id, summary_text)
+    updated_summary, updated_generated_at = db.get_professor_ai_summary(professor_id)
+    return {"summary": updated_summary, "generated_at": updated_generated_at, "cached": False}
 
 
 @app.get("/api/professors/{professor_id}/publications")

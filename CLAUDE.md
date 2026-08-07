@@ -113,7 +113,19 @@ A `pytest` suite lives in `tests/`, covering the pure logic where the subtle bug
   
   Each card also has a "Show publications" toggle that lazy-loads `/api/professors/{id}/publications` on first click.
 - Run it from the repo root: `uvicorn backend.main:app --reload`, then open `http://localhost:8000/`.
-- No LLM calls happen anywhere in the search path. When adding LLM-based summaries/cold-email generation, add a new `/api/*` endpoint in `backend/main.py` rather than changing the search endpoints, and keep it opt-in from the frontend so the MVP search flow has no external API dependency or added latency.
+- No LLM calls happen anywhere in the search path (`/api/search` and friends) — the only endpoint that calls Claude is `POST /api/professors/{id}/summary`, documented below. Cold-email generation will be the same shape: a new `/api/*` endpoint, opt-in from the frontend, no change to the search endpoints.
+
+### Professor detail and AI summaries (`backend/llm.py`, Phase 5A)
+
+`GET /api/professors/{id}` returns the professor row joined to `Institution`, plus the *full* topic list (not the top-3 chips `/api/search` returns) and whatever's cached in `ai_summary`/`ai_summary_generated_at`. It does not inline publications — the frontend calls the existing `/api/professors/{id}/publications` alongside it; there was no reason to duplicate that query into a second payload shape.
+
+`POST /api/professors/{id}/summary` generates lazily on first request and caches: a professor whose `ai_summary` is already set returns it directly (`"cached": true`, no LLM call); otherwise it gathers up to 8 topics and the 8 most recent publications (title + abstract, ordered by `publication_date` — `Publication` has no stored citation count to rank by instead), calls Claude, and writes the result via `update_professor_ai_summary()` before returning.
+
+**If a professor has zero topics and zero publications, the endpoint returns `{"summary": null, "reason": "insufficient_data"}` without calling the model at all.** Generating a summary from nothing risks inventing detail about a real named academic — the same "absent beats wrong" principle used everywhere else in this project (clearing a mismatched ORCID, not guessing emails).
+
+**Split for testability, same pattern as `backend/tokens.py`/`backend/google_auth.py`:** `build_summary_prompt()` and its formatting helpers in `backend/llm.py` are pure — no network, no DB — and covered in `tests/test_llm.py`, including the shapes that are easy to get subtly wrong (a missing institution rendering as the literal string `"None"`, a publication with no date producing `"Title ()"`, an abstract long enough to blow up the prompt). `generate_summary()` itself (the actual `claude-opus-5` call, `output_config={"effort": "low"}`, non-streaming since the output is a short paragraph) isn't unit tested, mirroring the OpenAlex fetch functions.
+
+**The system prompt is the primary defense against hallucination**, not a fallback: it instructs the model to ground every claim in the supplied topics/publications only, to write a shorter paragraph rather than invent detail when the data is thin, and never to guess at awards, titles, or other unstated personal details. `SummaryGenerationNotConfigured` (missing `ANTHROPIC_API_KEY`, → `503`) and `SummaryGenerationRefused` (model declined or returned no text, → `502`) are both distinct exceptions so the route can return a clean error instead of surfacing whatever the SDK happens to raise.
 
 ### Accounts (`backend/auth.py`, Phase 5A)
 
