@@ -386,7 +386,7 @@ These are prerequisites, not polish. Nothing can deploy until they're done.
   opened and closed in a FastAPI lifespan handler, with a bounded size and
   liveness check on checkout.
 - **Secrets come from the environment, not a file.** `.env` + `python-dotenv`
-  stays for local dev; production reads `DATABASE_URL`, `ANTHROPIC_API_KEY`,
+  stays for local dev; production reads `DATABASE_URL`, `OPENAI_API_KEY`,
   `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, and the email-provider key from the
   platform's secret store. Fail loudly at startup if any are missing rather
   than at first request.
