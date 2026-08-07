@@ -1,25 +1,110 @@
+import contextvars
+import functools
+import os
+
 import psycopg
 from psycopg.errors import UniqueViolation
-import threading
+from psycopg_pool import ConnectionPool
 
-_local = threading.local()
+# DATABASE_URL is unset in local dev -- falls back to the same local
+# peer/trust-auth connection this module always used. Production sets
+# DATABASE_URL (see docs/ROADMAP.md Phase 6.1).
+_DEFAULT_CONNINFO = "dbname=research_lab_finder user=siddanthkarthik"
+
+_pool = None
+
+# One checked-out connection per logical unit of work, not per thread
+# forever -- the opposite of the old threading.local cache, which is
+# exactly what let a hosted Postgres's dropped-idle-connection behavior go
+# unnoticed against local Postgres. "Unit of work" here specifically means
+# "one call to a function decorated with with_connection() below" (a route
+# handler, or a Depends() callable like current_user), NOT "one HTTP
+# request" -- verified empirically that FastAPI runs each sync dependency
+# and the sync endpoint body as *separate* threadpool calls, each getting
+# its own independently-copied contextvars.Context, so a contextvar set in
+# one is invisible in the other even when the same OS thread happens to be
+# reused. A single request-scoped release (e.g. from middleware, which runs
+# in the async context that spawned those threaded calls) can't see what
+# any of them checked out -- decorating each such function individually is
+# what keeps checkout and release inside the same copied context.
+# Ingestion scripts get correct behavior for free without decoration: each
+# script is one plain Python process/thread with no threadpool involved, so
+# the ambient context is never copied out from under them.
+_current_connection = contextvars.ContextVar("_current_connection", default=None)
+
+
+def init_pool():
+    """Opens the pool. Called from backend/main.py's lifespan handler on
+    startup; ingestion scripts and tests never call this directly -- they
+    get a lazily-initialized pool from get_connection() below instead, since
+    they have no lifespan handler to call it for them."""
+    global _pool
+    if _pool is not None:
+        return
+    conninfo = os.environ.get("DATABASE_URL", _DEFAULT_CONNINFO)
+    _pool = ConnectionPool(
+        conninfo,
+        kwargs={"autocommit": True},
+        min_size=1,
+        max_size=10,
+        check=ConnectionPool.check_connection,
+        open=False,
+    )
+    _pool.open()
+
+
+def close_pool():
+    """Closes the pool. Called from backend/main.py's lifespan handler on
+    shutdown."""
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
+
 
 def get_connection():
-    connection = getattr(_local, "connection", None)
-    if connection is None or connection.closed:
-        connection = psycopg.connect(
-            dbname='research_lab_finder',
-            user='siddanthkarthik',
-            autocommit=True
-        )
-        _local.connection = connection
+    connection = _current_connection.get()
+    if connection is not None and not connection.closed:
+        return connection
+
+    init_pool()
+    connection = _pool.getconn()
+    _current_connection.set(connection)
     return connection
 
-def close_connection():
-    connection = getattr(_local, "connection", None)
-    if connection is not None and not connection.closed:
-        connection.close()
-    _local.connection = None
+
+def release_connection():
+    """Returns the current context's connection to the pool, if any. Called
+    by with_connection() below after each decorated call, and at the end of
+    every ingestion script (still exported as close_connection for those
+    call sites -- the name stuck from before pooling, but the behavior now
+    is "give it back to the pool", not "close the socket")."""
+    connection = _current_connection.get()
+    if connection is not None:
+        _pool.putconn(connection)
+        _current_connection.set(None)
+
+
+# Old name, kept because every ingestion script's __main__ block already
+# imports and calls this at the end of its run.
+close_connection = release_connection
+
+
+def with_connection(func):
+    """Decorator for a route handler or FastAPI Depends() callable that
+    touches the database: any connection checked out via get_connection()
+    during this call is returned to the pool when the call finishes, success
+    or error alike. See the _current_connection comment above for why this
+    has to be per-function rather than per-request."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        finally:
+            release_connection()
+
+    return wrapper
 
 def get_all_institutions():
     connection = get_connection()

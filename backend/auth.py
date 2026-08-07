@@ -90,6 +90,7 @@ def google_client_id():
 
 
 @router.post("/api/auth/google")
+@db.with_connection
 def google_sign_in(body: GoogleSignInRequest, request: Request):
     try:
         identity = verify_google_id_token(body.id_token)
@@ -138,6 +139,7 @@ def signup(body: SignupRequest):
 
 
 @router.post("/api/auth/verify-email")
+@db.with_connection
 def verify_email(body: VerifyEmailRequest, request: Request):
     payload = read_email_verification_token(body.token)
     if payload is None:
@@ -154,6 +156,7 @@ def verify_email(body: VerifyEmailRequest, request: Request):
 
 
 @router.post("/api/auth/login")
+@db.with_connection
 def login(body: LoginRequest, request: Request):
     identity = db.get_auth_identity("password", body.email)
     if identity is None or identity[4] is None or not verify_password(body.password, identity[4]):
@@ -165,6 +168,7 @@ def login(body: LoginRequest, request: Request):
 
 
 @router.post("/api/auth/forgot")
+@db.with_connection
 def forgot_password(body: ForgotPasswordRequest):
     user = db.get_user_by_email(body.email)
     if user is not None:
@@ -180,6 +184,7 @@ def forgot_password(body: ForgotPasswordRequest):
 
 
 @router.post("/api/auth/reset")
+@db.with_connection
 def reset_password(body: ResetPasswordRequest, request: Request):
     payload = read_password_reset_token(body.token)
     if payload is None:
@@ -242,11 +247,13 @@ def _profile_public(row):
 
 
 @router.get("/api/me/profile")
+@db.with_connection
 def get_profile(user=Depends(current_user)):
     return _profile_public(db.get_student_profile(user[0]))
 
 
 @router.put("/api/me/profile")
+@db.with_connection
 def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
     user_id = user[0]
     # Full replace (EXCLUDED, not COALESCE) inside upsert_student_profile --

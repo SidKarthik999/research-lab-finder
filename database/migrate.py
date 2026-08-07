@@ -8,17 +8,23 @@ re-running this script only applies new migrations. Each migration runs in
 its own transaction; a failure stops the run without recording that version.
 """
 
+import os
 import pathlib
 
 import psycopg
 
 MIGRATIONS_DIR = pathlib.Path(__file__).parent / "migrations"
 
+# Same fallback as src/database.py -- DATABASE_URL is unset in local dev,
+# set in production (see docs/ROADMAP.md Phase 6.1). This is a standalone
+# one-shot script (the release-step migration runner), not a pooled server,
+# so a single plain connection is the right tool here, not ConnectionPool.
+_DEFAULT_CONNINFO = "dbname=research_lab_finder user=siddanthkarthik"
+
 
 def get_connection():
     return psycopg.connect(
-        dbname="research_lab_finder",
-        user="siddanthkarthik",
+        os.environ.get("DATABASE_URL", _DEFAULT_CONNINFO),
         autocommit=False,
     )
 

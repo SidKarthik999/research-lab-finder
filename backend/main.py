@@ -14,6 +14,7 @@ Run from the repo root: uvicorn backend.main:app --reload
 """
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -36,7 +37,19 @@ from src.database import get_connection
 
 load_dotenv()
 
-app = FastAPI(title="Research Lab Finder API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Opens the DB connection pool once at process startup and closes it at
+    # shutdown, rather than each request/thread opening its own connection
+    # and holding it forever -- see src/database.py and
+    # docs/ROADMAP.md Phase 6.1.
+    db.init_pool()
+    yield
+    db.close_pool()
+
+
+app = FastAPI(title="Research Lab Finder API", lifespan=lifespan)
 
 # https_only requires ENV=production (and therefore HTTPS) to be set --
 # never enforced in local dev, where the app is served over plain HTTP.
@@ -219,6 +232,7 @@ def build_search_query(
 
 
 @app.get("/api/search")
+@db.with_connection
 def search_professors(
     name: str | None = Query(None, description="Match against the professor's own name"),
     text: str | None = Query(None, description="Free-text search over publication titles and abstracts"),
@@ -254,6 +268,7 @@ def search_professors(
 
 
 @app.get("/api/fields")
+@db.with_connection
 def list_fields():
     # Unlike /api/topics (2,400+ distinct topic names -- autocomplete makes
     # sense) or /api/institutions, ResearchTopic.field is OpenAlex's top-level
@@ -268,6 +283,7 @@ def list_fields():
 
 
 @app.get("/api/topics")
+@db.with_connection
 def list_topics(
     q: str | None = None,
     field: str | None = Query(None, description="Scope suggestions to topics under this field"),
@@ -334,6 +350,7 @@ def _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=8):
 
 
 @app.get("/api/professors/{professor_id}")
+@db.with_connection
 def professor_detail(professor_id: int):
     connection = get_connection()
     cursor = connection.cursor()
@@ -371,6 +388,7 @@ def professor_detail(professor_id: int):
 
 
 @app.post("/api/professors/{professor_id}/summary")
+@db.with_connection
 def professor_summary(professor_id: int):
     # get_professor_ai_summary returns None only when the professor row
     # itself doesn't exist -- a professor with no summary yet still comes
@@ -418,6 +436,7 @@ def professor_summary(professor_id: int):
 
 
 @app.get("/api/professors/{professor_id}/publications")
+@db.with_connection
 def professor_publications(professor_id: int):
     connection = get_connection()
     cursor = connection.cursor()
@@ -454,6 +473,7 @@ STUDENT_PROFILE_COLUMNS = [
 
 
 @app.post("/api/professors/{professor_id}/cold-email")
+@db.with_connection
 def professor_cold_email(professor_id: int, user=Depends(current_user)):
     # user is the raw (id, email, email_verified, name, avatar_url) tuple
     # current_user returns -- same indexing convention as backend/auth.py.
@@ -510,6 +530,7 @@ def professor_cold_email(professor_id: int, user=Depends(current_user)):
 
 
 @app.get("/api/institutions")
+@db.with_connection
 def list_institutions(q: str | None = None, limit: int = Query(20, ge=1, le=100)):
     connection = get_connection()
     cursor = connection.cursor()
@@ -523,6 +544,25 @@ def list_institutions(q: str | None = None, limit: int = Query(20, ge=1, le=100)
     institutions = [row[0] for row in cursor.fetchall()]
     cursor.close()
     return {"institutions": institutions}
+
+
+@app.get("/healthz")
+@db.with_connection
+def healthz():
+    # Only returns 200 if a real query against the DB succeeds, so a
+    # deploy platform restarts a container that's up but can't reach the
+    # database, rather than leaving it serving broken responses. See
+    # docs/ROADMAP.md Phase 6.1.
+    connection = get_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT 1;")
+        cursor.fetchone()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    finally:
+        cursor.close()
+    return {"status": "ok"}
 
 
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"

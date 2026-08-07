@@ -19,6 +19,7 @@ def log_out(request):
     request.session.clear()
 
 
+@db.with_connection
 def current_user(request: Request):
     user_id = request.session.get("user_id")
     if user_id is None:
@@ -32,6 +33,7 @@ def current_user(request: Request):
     return user
 
 
+@db.with_connection
 def optional_current_user(request: Request):
     user_id = request.session.get("user_id")
     if user_id is None:
