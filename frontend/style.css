@@ -5,6 +5,20 @@
   --muted: #666;
   --border: #ddd;
   --accent: #2b5fb0;
+  --success: #1a7a3c;
+  --error: #b3261e;
+  --surface: #f4f4f4;
+
+  /* Spacing scale -- new components (header, forms, cards on the detail
+     page) use these instead of inventing their own rem values. Existing
+     rules keep their original hand-picked values; not rewritten wholesale
+     just to reference the scale. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -14,6 +28,9 @@
     --muted: #aaa;
     --border: #333;
     --accent: #6ea3ff;
+    --success: #4ade80;
+    --error: #f87171;
+    --surface: #1c1c1c;
   }
 }
 
@@ -35,6 +52,57 @@ header p {
   margin-top: 0.25rem;
 }
 
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.site-header .branding a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.account-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.9rem;
+}
+
+.account-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.account-nav a:hover {
+  text-decoration: underline;
+}
+
+.account-nav .user-name {
+  color: var(--muted);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.back-link {
+  display: inline-block;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-bottom: var(--space-2);
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
 #search-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -54,7 +122,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -63,10 +132,40 @@ select {
   font: inherit;
 }
 
+textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
 .hint {
   font-size: 0.78rem;
   color: var(--muted);
   margin: 0;
+}
+
+.form-error,
+.form-success {
+  font-size: 0.85rem;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 6px;
+}
+
+.form-error {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+
+.form-success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 24rem;
 }
 
 #advanced-search {
@@ -102,6 +201,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* .publications-toggle already faked this by overriding background --
+   promoted to a real variant so auth/composer screens don't repeat that
+   trick. */
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+  padding: 0.5rem 0.25rem;
+}
+
+button.ghost:hover {
+  text-decoration: underline;
+}
+
 #search-form button {
   grid-column: 1 / -1;
   justify-self: start;
@@ -119,10 +237,32 @@ button:disabled {
   gap: 1rem;
 }
 
-.result-card {
+.result-card,
+.card {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem;
+}
+
+.card + .card {
+  margin-top: var(--space-4);
+}
+
+.card h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 1.1rem;
+}
+
+.summary-box {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: var(--space-4);
+  line-height: 1.5;
+}
+
+.empty-state {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .result-card h2 {

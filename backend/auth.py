@@ -16,6 +16,8 @@ a signup request can't touch -- and can't take over -- an account that
 already exists under that email.
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
@@ -78,6 +80,15 @@ def _user_public(user):
     }
 
 
+@router.get("/api/auth/google/client-id")
+def google_client_id():
+    # Public value -- Google client IDs are meant to be embedded in
+    # frontend JS. Returned as null (not a 503) when unset, so the sign-in
+    # view can render its own "not configured" state instead of treating a
+    # config gap as a request failure.
+    return {"client_id": os.environ.get("GOOGLE_CLIENT_ID")}
+
+
 @router.post("/api/auth/google")
 def google_sign_in(body: GoogleSignInRequest, request: Request):
     try:
@@ -116,7 +127,7 @@ def google_sign_in(body: GoogleSignInRequest, request: Request):
 def signup(body: SignupRequest):
     password_hash = hash_password(body.password)
     token = make_email_verification_token(body.email, password_hash)
-    verify_url = f"/verify-email?token={token}"
+    verify_url = f"/#/verify-email?token={token}"
     send_email(
         body.email,
         "Verify your Research Lab Finder account",
@@ -158,7 +169,7 @@ def forgot_password(body: ForgotPasswordRequest):
     user = db.get_user_by_email(body.email)
     if user is not None:
         token = make_password_reset_token(user[0])
-        reset_url = f"/reset-password?token={token}"
+        reset_url = f"/#/reset-password?token={token}"
         send_email(
             body.email,
             "Reset your Research Lab Finder password",
@@ -203,3 +214,52 @@ def logout(request: Request):
 @router.get("/api/me")
 def me(user=Depends(current_user)):
     return _user_public(user)
+
+
+class StudentProfileRequest(BaseModel):
+    level: str | None = None
+    school: str | None = None
+    graduation_year: int | None = None
+    coursework: str | None = None
+    skills: str | None = None
+    prior_experience: str | None = None
+    looking_for: str | None = None
+
+
+def _profile_public(row):
+    if row is None:
+        return {}
+    _user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for = row
+    return {
+        "level": level,
+        "school": school,
+        "graduation_year": graduation_year,
+        "coursework": coursework,
+        "skills": skills,
+        "prior_experience": prior_experience,
+        "looking_for": looking_for,
+    }
+
+
+@router.get("/api/me/profile")
+def get_profile(user=Depends(current_user)):
+    return _profile_public(db.get_student_profile(user[0]))
+
+
+@router.put("/api/me/profile")
+def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
+    user_id = user[0]
+    # Full replace (EXCLUDED, not COALESCE) inside upsert_student_profile --
+    # this is the student directly editing their own form, so leaving a
+    # field blank must actually clear it. See CLAUDE.md Phase 5A.
+    db.upsert_student_profile(
+        user_id,
+        level=body.level,
+        school=body.school,
+        graduation_year=body.graduation_year,
+        coursework=body.coursework,
+        skills=body.skills,
+        prior_experience=body.prior_experience,
+        looking_for=body.looking_for,
+    )
+    return _profile_public(db.get_student_profile(user_id))
