@@ -55,5 +55,5 @@ dependencies:
       - itsdangerous==2.2.0
       - google-auth==2.56.3
       - email-validator==2.3.0
-      - anthropic==0.120.2
+      - openai==2.53.0
 prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder

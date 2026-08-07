@@ -446,7 +446,7 @@ user or one script can spend real money on your API key.
 - **Per-user daily cap on cold-email generation**, enforced server-side.
   Summaries are naturally bounded because they cache after first view; email
   drafting is not.
-- **A monthly spend alert** on the Anthropic account, so a runaway loop is
+- **A monthly spend alert** on the OpenAI account, so a runaway loop is
   discovered by a notification rather than an invoice.
 - **Rate limits on auth endpoints** (login, signup, password reset) by IP and
   by email, which the Phase 5A design already calls for.
@@ -481,9 +481,11 @@ that a localhost prototype doesn't have.
 
 Small hosting tier plus small managed Postgres lands around **$0–25/month**
 at this stage; several providers have free tiers this dataset fits inside.
-The variable is LLM usage — roughly **$0.02 per professor summary**, paid
-once each thanks to caching, plus per-draft email cost. The caps in 6.4 are
-what keep that bounded.
+The variable is LLM usage — roughly **$0.002 per professor summary** on
+`gpt-5.4-nano` (down from an original ~$0.02 estimate against Claude Opus 5;
+switched providers in Phase 5A once the feature was built — see CLAUDE.md),
+paid once each thanks to caching, plus per-draft email cost. The caps in 6.4
+are what keep that bounded.
 
 **Done when** a student who has never met you can open a URL, search, sign
 in, and get an email draft — and when you'd find out it was broken without a

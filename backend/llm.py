@@ -1,12 +1,19 @@
-"""Claude-generated professor summaries (Phase 5A).
+"""GPT-generated professor summaries (Phase 5A).
 
 Split the same way as the auth modules (backend/tokens.py,
 backend/google_auth.py): build_summary_prompt() and its formatting
 helpers are pure -- no network, no DB -- so prompt assembly is testable
 without an API key, the same reasoning that keeps build_search_query()
 in backend/main.py separate from the route handler that executes it.
-generate_summary() is the actual Claude API call and isn't unit tested,
-mirroring the OpenAlex fetch functions in src/ingestion/.
+generate_summary() is the actual OpenAI Responses API call and isn't
+unit tested, mirroring the OpenAlex fetch functions in src/ingestion/.
+
+Uses gpt-5.4-nano: this task is synthesis from provided facts, not
+multi-step reasoning, so the cheapest current-generation tier is the
+right fit -- reasoning effort is explicitly set to "none" rather than
+left at whatever the SDK defaults to, since there's nothing here worth
+deliberating over. (Originally built against Claude Opus 5; swapped
+providers without touching anything below build_summary_prompt().)
 
 Every summary is generated only from data already in this database
 (name, institution, topics, the professor's own publication titles and
@@ -18,9 +25,9 @@ produce. See CLAUDE.md / docs/ROADMAP.md Phase 5A.
 
 import os
 
-import anthropic
+import openai
 
-MODEL = "claude-opus-5"
+MODEL = "gpt-5.4-nano"
 MAX_ABSTRACT_CHARS = 600
 
 SYSTEM_PROMPT = """\
@@ -48,7 +55,7 @@ data -- the surrounding interface already discloses that.\
 
 
 class SummaryGenerationNotConfigured(Exception):
-    """ANTHROPIC_API_KEY isn't set -- distinct from a failed generation so
+    """OPENAI_API_KEY isn't set -- distinct from a failed generation so
     the route handler can return a clean "not configured" response instead
     of surfacing whatever error the SDK happens to raise."""
 
@@ -93,23 +100,22 @@ def build_summary_prompt(name, institution_name, topics, publications):
 
 
 def generate_summary(name, institution_name, topics, publications):
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get("OPENAI_API_KEY"):
         raise SummaryGenerationNotConfigured()
 
-    client = anthropic.Anthropic()
+    client = openai.OpenAI()
     prompt = build_summary_prompt(name, institution_name, topics, publications)
-    response = client.messages.create(
+    response = client.responses.create(
         model=MODEL,
-        max_tokens=500,
-        system=SYSTEM_PROMPT,
-        output_config={"effort": "low"},
-        messages=[{"role": "user", "content": prompt}],
+        instructions=SYSTEM_PROMPT,
+        input=prompt,
+        max_output_tokens=500,
+        reasoning={"effort": "none"},
     )
 
-    if response.stop_reason == "refusal":
+    # response.status is "incomplete" if generation was cut off (e.g. hit
+    # max_output_tokens) rather than finishing normally -- treat that the
+    # same as a refusal rather than returning a truncated summary.
+    if response.status == "incomplete" or not response.output_text:
         raise SummaryGenerationRefused()
-
-    text = "".join(block.text for block in response.content if block.type == "text").strip()
-    if not text:
-        raise SummaryGenerationRefused()
-    return text
+    return response.output_text.strip()
