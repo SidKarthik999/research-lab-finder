@@ -17,12 +17,20 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import router as auth_router
-from backend.llm import SummaryGenerationNotConfigured, SummaryGenerationRefused, generate_summary
+from backend.llm import (
+    ColdEmailGenerationNotConfigured,
+    ColdEmailGenerationRefused,
+    SummaryGenerationNotConfigured,
+    SummaryGenerationRefused,
+    generate_cold_email,
+    generate_summary,
+)
+from backend.sessions import current_user
 from src import database as db
 from src.database import get_connection
 
@@ -305,9 +313,11 @@ def _fetch_professor_topics(cursor, professor_id, limit=None):
 
 def _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=8):
     # Separate from professor_publications()'s query below because that one
-    # is for the reading-list display and doesn't need abstract; this one
-    # feeds the summary prompt and does. Ordered by recency, not citation
-    # count -- Publication has no stored citation count to rank by.
+    # returns every publication for the reading-list display (no LIMIT) and
+    # this one is capped for the summary/cold-email prompts. Both select
+    # abstract now that the frontend also shows it (click-to-expand on the
+    # publication list). Ordered by recency, not citation count --
+    # Publication has no stored citation count to rank by.
     cursor.execute(
         """
         SELECT Publication.title, Publication.abstract, Publication.publication_date
@@ -413,7 +423,7 @@ def professor_publications(professor_id: int):
     cursor = connection.cursor()
     cursor.execute(
         """
-        SELECT Publication.title, Publication.journal, Publication.publication_date,
+        SELECT Publication.title, Publication.abstract, Publication.journal, Publication.publication_date,
                Publication.doi, Publication.url
         FROM Publication
         JOIN ProfessorPublication ON ProfessorPublication.publication_id = Publication.id
@@ -426,6 +436,77 @@ def professor_publications(professor_id: int):
     rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
     cursor.close()
     return {"publications": rows}
+
+
+# Column order returned by db.get_student_profile() -- that function returns
+# a raw row tuple (same convention as get_professor_ai_summary), so this is
+# the one place that turns it into the dict shape backend/llm.py expects.
+STUDENT_PROFILE_COLUMNS = [
+    "user_id",
+    "level",
+    "school",
+    "graduation_year",
+    "coursework",
+    "skills",
+    "prior_experience",
+    "looking_for",
+]
+
+
+@app.post("/api/professors/{professor_id}/cold-email")
+def professor_cold_email(professor_id: int, user=Depends(current_user)):
+    # user is the raw (id, email, email_verified, name, avatar_url) tuple
+    # current_user returns -- same indexing convention as backend/auth.py.
+    user_id, _email, _email_verified, user_name, _avatar_url = user
+    profile_row = db.get_student_profile(user_id)
+    if profile_row is None:
+        # A draft with nothing to say about the student is worse than no
+        # draft -- ask them to fill out a profile first rather than
+        # generating a generic, unpersonalized email. See CLAUDE.md /
+        # docs/ROADMAP.md Phase 5A: absent beats wrong.
+        raise HTTPException(
+            status_code=422,
+            detail="Complete your student profile before generating an email draft.",
+        )
+    profile = dict(zip(STUDENT_PROFILE_COLUMNS, profile_row))
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT Professor.name, Institution.name
+        FROM Professor
+        LEFT JOIN Institution ON Institution.id = Professor.institution_id
+        WHERE Professor.id = %s;
+        """,
+        [professor_id],
+    )
+    row = cursor.fetchone()
+    if row is None:
+        cursor.close()
+        raise HTTPException(status_code=404, detail="Professor not found")
+    professor_name, institution_name = row
+
+    topics = _fetch_professor_topics(cursor, professor_id, limit=8)
+    publications = _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=5)
+    cursor.close()
+
+    if not topics and not publications:
+        # Nothing to ground the professor half of the email in -- same
+        # "absent beats wrong" call as the summary endpoint above.
+        return {"draft": None, "reason": "insufficient_data"}
+
+    try:
+        draft_body = generate_cold_email(
+            user_name, profile, professor_name, institution_name, topics, publications
+        )
+    except ColdEmailGenerationNotConfigured:
+        raise HTTPException(status_code=503, detail="Email drafting is not configured yet.")
+    except ColdEmailGenerationRefused:
+        raise HTTPException(status_code=502, detail="Couldn't draft an email for this professor.")
+
+    draft_id = db.insert_email_draft(user_id, professor_id, draft_body)
+    return {"draft": draft_body, "draft_id": draft_id}
 
 
 @app.get("/api/institutions")

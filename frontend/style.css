@@ -1,13 +1,22 @@
 :root {
   color-scheme: light dark;
-  --fg: #1a1a1a;
-  --bg: #ffffff;
-  --muted: #666;
-  --border: #ddd;
-  --accent: #2b5fb0;
-  --success: #1a7a3c;
-  --error: #b3261e;
-  --surface: #f4f4f4;
+  --fg: #1c1530;
+  --bg: #f6f3fd;
+  --muted: #6b6480;
+  --border: #e2dbf5;
+  --accent: #7c3aed;
+  --accent-2: #db2777;
+  --accent-3: #0891b2;
+  --accent-fg: #ffffff;
+  --success: #15803d;
+  --error: #c8281f;
+  --surface: #ffffff;
+  --surface-2: #f3edfd;
+  --shadow: 60, 30, 110;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
 
   /* Spacing scale -- new components (header, forms, cards on the detail
      page) use these instead of inventing their own rem values. Existing
@@ -23,14 +32,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: #eaeaea;
-    --bg: #121212;
-    --muted: #aaa;
-    --border: #333;
-    --accent: #6ea3ff;
+    --fg: #f0ecfb;
+    --bg: #150f28;
+    --muted: #aba1c9;
+    --border: #362a54;
+    --accent: #b794f6;
+    --accent-2: #f472b6;
+    --accent-3: #22d3ee;
+    --accent-fg: #150f28;
     --success: #4ade80;
     --error: #f87171;
-    --surface: #1c1c1c;
+    --surface: #1e1638;
+    --surface-2: #271d47;
+    --shadow: 0, 0, 0;
   }
 }
 
@@ -38,57 +52,163 @@
   box-sizing: border-box;
 }
 
-body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--fg);
-  background: var(--bg);
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 1.5rem;
+html {
+  scrollbar-gutter: stable;
 }
 
-header p {
-  color: var(--muted);
-  margin-top: 0.25rem;
+body {
+  font-family: -apple-system, "SF Pro Text", "Inter", system-ui, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--fg);
+  background:
+    radial-gradient(760px 420px at 8% -10%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 60%),
+    radial-gradient(680px 380px at 100% 0%, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent 55%),
+    radial-gradient(700px 500px at 50% 115%, color-mix(in srgb, var(--accent-3) 20%, transparent), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
+
+body > * {
+  max-width: 880px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+a {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a,
+  button,
+  .result-card,
+  .card,
+  input,
+  select,
+  textarea {
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.2s ease,
+      transform 0.15s ease;
+  }
+}
+
+/* --- Header --- */
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-4);
   flex-wrap: wrap;
+  max-width: none;
+  padding: var(--space-4) max(var(--space-5), calc((100% - 880px) / 2));
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header .branding {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .site-header .branding a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: inherit;
   text-decoration: none;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.brand-mark svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.site-header h1 {
+  font-size: 1.05rem;
+  margin: 0;
 }
 
 .account-nav {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .account-nav a {
-  color: var(--accent);
+  color: var(--fg);
   text-decoration: none;
+  font-weight: 500;
 }
 
 .account-nav a:hover {
-  text-decoration: underline;
+  color: var(--accent);
 }
 
 .account-nav .user-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--muted);
 }
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.avatar.large {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 1.3rem;
+}
+
+/* --- Layout --- */
 
 main {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  padding: var(--space-5) var(--space-4) var(--space-6);
 }
 
 .back-link {
@@ -96,6 +216,7 @@ main {
   color: var(--accent);
   text-decoration: none;
   font-size: 0.9rem;
+  font-weight: 500;
   margin-bottom: var(--space-2);
 }
 
@@ -103,38 +224,105 @@ main {
   text-decoration: underline;
 }
 
+/* --- Search hero --- */
+
+.search-hero {
+  padding: var(--space-4) 0 var(--space-2);
+}
+
+.search-hero h1 {
+  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.3rem);
+  margin: 0 0 var(--space-2);
+  background: linear-gradient(135deg, var(--fg), var(--accent) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero-subtitle {
+  color: var(--muted);
+  font-size: 1.05rem;
+  margin: 0;
+  max-width: 42rem;
+}
+
+/* --- Search form --- */
+
+.search-panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+  background-clip: padding-box;
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.06), 0 20px 45px -22px rgba(var(--shadow), 0.5);
+}
+
+/* Gradient-ring border: a slightly larger gradient box sits behind the
+   panel and shows through a 1px gap, since `border-image` can't combine
+   with `border-radius` the way this needs to. */
+.search-panel::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2), var(--accent-3));
+  opacity: 0.55;
+}
+
 #search-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  gap: 0.9rem;
+  align-items: start;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 label {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--muted);
 }
 
 input,
 select,
 textarea {
-  padding: 0.5rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--fg);
   font: inherit;
 }
 
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 textarea {
-  resize: vertical;
-  min-height: 4.5rem;
+  /* Without this, a <textarea> outside a flex/grid container (e.g. the
+     cold-email draft box, sitting in a plain .card div) falls back to its
+     intrinsic size from the default `cols` attribute -- a few hundred
+     pixels wide regardless of the space actually available. */
+  display: block;
+  width: 100%;
+  /* Each textarea sets its own `rows` sized to what it realistically
+     holds (see profile.js / professorDetail.js) rather than a shared
+     min-height, and resizing is disabled -- the box is meant to already
+     be the right size, not something the user manually stretches. */
+  resize: none;
 }
 
 .hint {
@@ -148,7 +336,7 @@ textarea {
   font-size: 0.85rem;
   margin: 0;
   padding: var(--space-2) var(--space-3);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .form-error {
@@ -166,6 +354,157 @@ textarea {
   flex-direction: column;
   gap: var(--space-3);
   max-width: 24rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.04), 0 12px 32px -18px rgba(var(--shadow), 0.35);
+}
+
+/* --- Auth pages (sign in/up, forgot/reset password) --- */
+/* main is a plain flex column with no horizontal centering of its own
+   (that's what lets the search page's wide form/results fill the width),
+   so the narrow auth card needs its own centered wrapper rather than
+   just floating at main's left edge. */
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: var(--space-2);
+}
+
+.auth-page h1 {
+  margin-bottom: var(--space-4);
+}
+
+.auth-page .auth-card,
+.auth-page .form {
+  width: 100%;
+  text-align: left;
+}
+
+/* --- Auth card (sign in / sign up) --- */
+/* .form already gets its own card treatment (border/shadow/padding) for
+   the plain forms (profile, forgot/reset password). Sign in/up need that
+   same form nested inside a bigger card alongside a divider, the Google
+   button, and footer links -- .auth-card owns the outer card look, and
+   the nested-form override below lets .form blend into it instead of
+   drawing a card-in-a-card. */
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 24rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.04), 0 12px 32px -18px rgba(var(--shadow), 0.35);
+}
+
+.auth-card .form {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  max-width: none;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  text-align: center;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.auth-footer a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
+.quick-locations {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: -0.25rem;
+}
+
+.quick-locations-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 0.15rem;
+}
+
+.chip-button {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+/* button.chip-button (not just .chip-button) to match the specificity of
+   button:hover:not(:disabled) -- see the same note on .publication-title. */
+button.chip-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: none;
+  box-shadow: none;
+}
+
+/* .form's 24rem max-width is right for the narrow auth cards but far too
+   tight for a content-heavy form like the student profile (four textareas)
+   -- .form-wide overrides just the width, keeping .form's card look
+   (padding/border/shadow/flex layout) as-is. */
+.form-wide {
+  max-width: 100%;
+}
+
+.profile-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 36rem) {
+  .profile-fields-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 #advanced-search {
@@ -175,49 +514,98 @@ textarea {
 #advanced-search summary {
   cursor: pointer;
   color: var(--accent);
-  font-size: 0.9rem;
+  font-weight: 600;
+  font-size: 0.88rem;
   padding: 0.25rem 0;
 }
 
 .advanced-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 0.75rem;
   margin-top: 0.75rem;
+  /* Without this, grid cells stretch to the row's tallest cell by default
+     -- "Search publications" has a two-line hint underneath it that
+     "Professor name" doesn't, so without `start` the shorter field's box
+     gets stretched to match, leaving visible dead space below its input. */
+  align-items: start;
 }
 
+/* City/state/country read as one "location" unit -- keep them on one row
+   instead of letting the parent grid's auto-fit wrap them individually. */
+.location-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 30rem) {
+  .location-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Buttons --- */
+
 button {
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-fg);
   cursor: pointer;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.08);
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 4px 14px -6px color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* .publications-toggle already faked this by overriding background --
    promoted to a real variant so auth/composer screens don't repeat that
    trick. */
 button.secondary {
-  background: transparent;
+  background: var(--surface);
   color: var(--accent);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: none;
 }
 
 button.ghost {
   background: transparent;
   border-color: transparent;
-  color: var(--accent);
+  color: var(--fg);
   padding: 0.5rem 0.25rem;
+  box-shadow: none;
+  font-weight: 500;
 }
 
 button.ghost:hover {
+  color: var(--accent);
   text-decoration: underline;
+  transform: none;
+  box-shadow: none;
 }
 
 #search-form button {
@@ -225,23 +613,71 @@ button.ghost:hover {
   justify-self: start;
 }
 
+.search-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.4rem;
+  border-radius: 999px;
+  font-size: 0.98rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+}
+
+.btn-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 #status {
   color: var(--muted);
+  font-size: 0.9rem;
 }
+
+/* --- Result cards --- */
 
 #results {
   list-style: none;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .result-card,
 .card {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.04);
+}
+
+.result-card {
+  position: relative;
+  padding-left: calc(var(--space-5) + 4px);
+}
+
+.result-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--space-4);
+  bottom: var(--space-4);
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2), var(--accent-3));
+  opacity: 0.85;
+}
+
+.result-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  box-shadow: 0 10px 28px -16px rgba(var(--shadow), 0.4);
+  transform: translateY(-2px);
 }
 
 .card + .card {
@@ -254,10 +690,11 @@ button.ghost:hover {
 }
 
 .summary-box {
-  background: var(--surface);
-  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   padding: var(--space-4);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .empty-state {
@@ -266,8 +703,17 @@ button.ghost:hover {
 }
 
 .result-card h2 {
-  margin: 0 0 0.25rem;
-  font-size: 1.1rem;
+  margin: 0 0 0.3rem;
+  font-size: 1.15rem;
+}
+
+.result-card h2 a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.result-card h2 a:hover {
+  color: var(--accent);
 }
 
 .result-card .meta {
@@ -278,30 +724,86 @@ button.ghost:hover {
 
 .result-card .topics {
   font-size: 0.85rem;
-  margin-top: 0.5rem;
+  margin-top: 0.6rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
+/* A small rotating palette across the chip's position in its parent, so a
+   professor's topic list reads as a set of distinct tags rather than a wall
+   of identical pills -- pure CSS, no per-chip markup needed. */
 .topic-chip {
-  padding: 0.15rem 0.55rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
   font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.topics .topic-chip:nth-of-type(6n + 2) {
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+  color: color-mix(in srgb, var(--accent-2) 80%, var(--fg));
+}
+
+.topics .topic-chip:nth-of-type(6n + 3) {
+  background: color-mix(in srgb, #16a34a 16%, transparent);
+  color: color-mix(in srgb, #16a34a 70%, var(--fg));
+}
+
+.topics .topic-chip:nth-of-type(6n + 4) {
+  background: color-mix(in srgb, #d97706 16%, transparent);
+  color: color-mix(in srgb, #d97706 70%, var(--fg));
+}
+
+.topics .topic-chip:nth-of-type(6n + 5) {
+  background: color-mix(in srgb, var(--accent-3) 16%, transparent);
+  color: color-mix(in srgb, var(--accent-3) 75%, var(--fg));
+}
+
+.topics .topic-chip:nth-of-type(6n + 6) {
+  background: color-mix(in srgb, #e11d48 16%, transparent);
+  color: color-mix(in srgb, #e11d48 70%, var(--fg));
 }
 
 .result-card a {
   color: var(--accent);
 }
 
+/* --- Contact pills --- */
+
+.contact-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contact-line a {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  background: var(--surface-2);
+}
+
+.contact-line a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .publications-toggle {
-  margin-top: 0.5rem;
+  margin-top: var(--space-3);
   padding: 0.3rem 0.7rem;
   font-size: 0.85rem;
-  background: transparent;
-  color: var(--accent);
 }
 
 .publications {
@@ -314,13 +816,106 @@ button.ghost:hover {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.55rem;
   font-size: 0.9rem;
+}
+
+.publication-list li {
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.publication-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.publication-title {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* button.publication-title (not just .publication-title) to match the
+   specificity of the generic `button:hover:not(:disabled)` rule -- a
+   type+class selector here beats a class-only one at equal hover/class
+   count, since button:hover:not(:disabled) includes the `button` type. */
+button.publication-title:hover {
+  text-decoration: underline;
+  transform: none;
+  box-shadow: none;
+}
+
+.publication-title::before {
+  content: "▸ ";
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.publication-title[aria-expanded="true"]::before {
+  content: "▾ ";
+}
+
+.publication-abstract {
+  margin-top: 0.5rem;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.publication-abstract p {
+  margin: 0 0 var(--space-2);
+}
+
+.publication-link {
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.publication-link:hover {
+  text-decoration: underline;
 }
 
 #pagination {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+#page-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* --- Professor detail hero --- */
+
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.detail-hero-text h1 {
+  margin: 0 0 0.2rem;
+  font-size: 1.6rem;
+}
+
+.detail-hero-text .meta {
+  color: var(--muted);
+  margin: 0.15rem 0;
 }

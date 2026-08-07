@@ -59,20 +59,26 @@ export async function renderProfileView(container) {
     min: 1950,
     max: 2100,
   });
+  // rows sized to what each field realistically holds -- a class list or
+  // skills line runs short, prior experience tends to run longest.
   const courseworkInput = el(
     "textarea",
-    { id: "profile-coursework", name: "coursework" },
+    { id: "profile-coursework", name: "coursework", rows: "3" },
     profile.coursework || ""
   );
-  const skillsInput = el("textarea", { id: "profile-skills", name: "skills" }, profile.skills || "");
+  const skillsInput = el(
+    "textarea",
+    { id: "profile-skills", name: "skills", rows: "3" },
+    profile.skills || ""
+  );
   const priorExperienceInput = el(
     "textarea",
-    { id: "profile-prior-experience", name: "prior_experience" },
+    { id: "profile-prior-experience", name: "prior_experience", rows: "5" },
     profile.prior_experience || ""
   );
   const lookingForInput = el(
     "textarea",
-    { id: "profile-looking-for", name: "looking_for" },
+    { id: "profile-looking-for", name: "looking_for", rows: "4" },
     profile.looking_for || ""
   );
 
@@ -81,10 +87,14 @@ export async function renderProfileView(container) {
 
   const form = el(
     "form",
-    { class: "form" },
-    formField("Level", levelSelect),
-    formField("School", schoolInput),
-    formField("Expected graduation year", gradYearInput),
+    { class: "form form-wide" },
+    el(
+      "div",
+      { class: "profile-fields-row" },
+      formField("Level", levelSelect),
+      formField("School", schoolInput),
+      formField("Expected graduation year", gradYearInput)
+    ),
     formField("Relevant coursework", courseworkInput, "Classes, labs, or projects relevant to research."),
     formField("Skills / techniques", skillsInput, "Programming languages, lab techniques, tools you know."),
     formField("Prior research or work experience", priorExperienceInput),

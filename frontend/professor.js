@@ -4,7 +4,7 @@
 // Scholar/directory links are built exactly this way (query-string
 // construction, quoting rules) before changing anything here.
 
-import { el } from "./dom.js";
+import { el, mount } from "./dom.js";
 
 export function institutionDomain(url) {
   if (!url) return null;
@@ -40,17 +40,8 @@ export function directorySearchUrl(domain, name) {
   return `https://www.google.com/search?${params}`;
 }
 
-function interleave(nodes, separator) {
-  const result = [];
-  nodes.forEach((node, i) => {
-    if (i > 0) result.push(separator);
-    result.push(node);
-  });
-  return result;
-}
-
-// Returns a <p class="meta"> of contact links, or null if there's nothing
-// to show -- both viable directly as an el() child.
+// Returns a <p class="contact-line"> of pill-styled contact links, or null
+// if there's nothing to show -- both viable directly as an el() child.
 export function renderContactLine(professor) {
   const name = professor.professor_name || "";
   const domain = institutionDomain(professor.institution_website);
@@ -81,7 +72,7 @@ export function renderContactLine(professor) {
   }
 
   if (links.length === 0) return null;
-  return el("p", { class: "meta" }, ...interleave(links, " · "));
+  return el("p", { class: "contact-line" }, ...links);
 }
 
 // topics may be an array of plain strings (the /api/search response's
@@ -97,20 +88,47 @@ export function topicChips(topics) {
   );
 }
 
+// Clicking a paper's title expands it in place to show the abstract (built
+// lazily on first expand, cached on the DOM node after that) plus a link
+// out to the paper itself where one is on file -- the title toggles the
+// abstract, the link is a separate, explicit "go there" action.
+function renderPublicationItem(pub) {
+  const year = pub.publication_date ? pub.publication_date.slice(0, 4) : "";
+  const meta = [pub.journal, year].filter(Boolean).join(", ");
+  const abstractBox = el("div", { class: "publication-abstract", hidden: true });
+
+  const titleButton = el(
+    "button",
+    { type: "button", class: "publication-title", "aria-expanded": "false" },
+    pub.title || "(untitled)"
+  );
+  titleButton.addEventListener("click", () => {
+    const expanded = titleButton.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      abstractBox.hidden = true;
+      titleButton.setAttribute("aria-expanded", "false");
+      return;
+    }
+    if (!abstractBox.dataset.loaded) {
+      mount(
+        abstractBox,
+        el("p", {}, pub.abstract || "No abstract on file for this paper."),
+        pub.url
+          ? el("a", { href: pub.url, target: "_blank", rel: "noopener", class: "publication-link" }, "Read the full paper ↗")
+          : null
+      );
+      abstractBox.dataset.loaded = "true";
+    }
+    abstractBox.hidden = false;
+    titleButton.setAttribute("aria-expanded", "true");
+  });
+
+  return el("li", {}, titleButton, meta ? el("span", { class: "meta" }, ` — ${meta}`) : null, abstractBox);
+}
+
 export function publicationList(publications) {
   if (publications.length === 0) {
     return el("p", { class: "meta empty-state" }, "No publications on file.");
   }
-  return el(
-    "ul",
-    { class: "publication-list" },
-    publications.map((pub) => {
-      const year = pub.publication_date ? pub.publication_date.slice(0, 4) : "";
-      const meta = [pub.journal, year].filter(Boolean).join(", ");
-      const titleNode = pub.url
-        ? el("a", { href: pub.url, target: "_blank", rel: "noopener" }, pub.title)
-        : pub.title;
-      return el("li", {}, titleNode, meta ? el("span", { class: "meta" }, ` — ${meta}`) : null);
-    })
-  );
+  return el("ul", { class: "publication-list" }, publications.map(renderPublicationItem));
 }

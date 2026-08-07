@@ -115,12 +115,24 @@ export function renderSignInView(container) {
 
   mount(
     container,
-    el("h1", {}, "Sign in"),
-    form,
-    el("p", { class: "hint" }, "or"),
-    googleMount,
-    el("p", { class: "hint" }, "New here? ", el("a", { href: "#/signup" }, "Create an account")),
-    el("p", { class: "hint" }, el("a", { href: "#/forgot-password" }, "Forgot your password?"))
+    el(
+      "div",
+      { class: "auth-page" },
+      el("h1", {}, "Sign in"),
+      el(
+        "div",
+        { class: "auth-card" },
+        form,
+        el("div", { class: "auth-divider" }, "or"),
+        googleMount,
+        el(
+          "div",
+          { class: "auth-footer" },
+          el("p", {}, "New here? ", el("a", { href: "#/signup" }, "Create an account")),
+          el("p", {}, el("a", { href: "#/forgot-password" }, "Forgot your password?"))
+        )
+      )
+    )
   );
 
   renderGoogleButton(googleMount, goHome, showError);
@@ -168,12 +180,20 @@ export function renderSignUpView(container) {
 
   mount(
     container,
-    el("h1", {}, "Create an account"),
-    form,
-    successEl,
-    el("p", { class: "hint" }, "or"),
-    googleMount,
-    el("p", { class: "hint" }, "Already have an account? ", el("a", { href: "#/signin" }, "Sign in"))
+    el(
+      "div",
+      { class: "auth-page" },
+      el("h1", {}, "Create an account"),
+      el(
+        "div",
+        { class: "auth-card" },
+        form,
+        successEl,
+        el("div", { class: "auth-divider" }, "or"),
+        googleMount,
+        el("div", { class: "auth-footer" }, el("p", {}, "Already have an account? ", el("a", { href: "#/signin" }, "Sign in")))
+      )
+    )
   );
 
   renderGoogleButton(googleMount, goHome, showError);
@@ -206,7 +226,7 @@ export function renderForgotPasswordView(container) {
     }
   });
 
-  mount(container, el("h1", {}, "Reset your password"), form, successEl);
+  mount(container, el("div", { class: "auth-page" }, el("h1", {}, "Reset your password"), form, successEl));
 }
 
 export function renderResetPasswordView(container, params, query) {
@@ -244,7 +264,7 @@ export function renderResetPasswordView(container, params, query) {
     }
   });
 
-  mount(container, el("h1", {}, "Set a new password"), form);
+  mount(container, el("div", { class: "auth-page" }, el("h1", {}, "Set a new password"), form));
 }
 
 export async function renderVerifyEmailView(container, params, query) {

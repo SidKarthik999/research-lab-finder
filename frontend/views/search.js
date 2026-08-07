@@ -44,6 +44,66 @@ export function renderSearchView(container) {
   const stateInput = el("input", { type: "text", id: "state", name: "state" });
   const countryInput = el("input", { type: "text", id: "country", name: "country" });
 
+  const hero = el(
+    "div",
+    { class: "search-hero" },
+    el("h1", {}, "Find a research lab"),
+    el("p", { class: "hero-subtitle" }, "Search professors by research field, topic, institution, or location.")
+  );
+
+  // Preset labels only -- values are matched with ILIKE '%...%' against
+  // Institution.city/state (see build_search_query in backend/main.py), and
+  // are drawn from cities/states that actually have meaningful institution
+  // counts in the current data (checked against the DB, not guessed) so a
+  // click doesn't land on an empty result page.
+  const LOCATION_PRESETS = [
+    { label: "New York, NY", city: "New York", state: "New York" },
+    { label: "Chicago, IL", city: "Chicago", state: "Illinois" },
+    { label: "Los Angeles, CA", city: "Los Angeles", state: "California" },
+    { label: "Boston, MA", city: "Boston", state: "Massachusetts" },
+    { label: "Philadelphia, PA", city: "Philadelphia", state: "Pennsylvania" },
+  ];
+
+  function applyLocationPreset(preset) {
+    cityInput.value = preset.city;
+    stateInput.value = preset.state;
+    countryInput.value = "";
+    advancedDetails.open = true;
+    runSearch(1);
+  }
+
+  const locationPresetsEl = el(
+    "div",
+    { class: "quick-locations" },
+    el("span", { class: "quick-locations-label" }, "Near:"),
+    ...LOCATION_PRESETS.map((preset) =>
+      el(
+        "button",
+        { type: "button", class: "chip-button", onClick: () => applyLocationPreset(preset) },
+        preset.label
+      )
+    )
+  );
+
+  const advancedDetails = el(
+    "details",
+    { id: "advanced-search" },
+    el("summary", {}, "Advanced search"),
+    el(
+      "div",
+      { class: "advanced-fields" },
+      el("div", { class: "field" }, el("label", { for: "name" }, "Professor name"), nameInput),
+      el("div", { class: "field" }, el("label", { for: "text" }, "Search publication names"), textInput),
+      el(
+        "div",
+        { class: "location-fields" },
+        el("div", { class: "field" }, el("label", { for: "city" }, "City"), cityInput),
+        el("div", { class: "field" }, el("label", { for: "state" }, "State"), stateInput),
+        el("div", { class: "field" }, el("label", { for: "country" }, "Country"), countryInput)
+      )
+    )
+  );
+
   const form = el(
     "form",
     { id: "search-form" },
@@ -56,27 +116,20 @@ export function renderSearchView(container) {
       institutionInput,
       institutionOptions
     ),
+    locationPresetsEl,
+    advancedDetails,
     el(
-      "details",
-      { id: "advanced-search" },
-      el("summary", {}, "Advanced search"),
-      el(
-        "div",
-        { class: "advanced-fields" },
-        el("div", { class: "field" }, el("label", { for: "name" }, "Professor name"), nameInput),
-        el(
-          "div",
-          { class: "field" },
-          el("label", { for: "text" }, "Search publications"),
-          textInput,
-          el("p", { class: "hint" }, "Searches actual paper titles and abstracts, not just topic categories.")
-        ),
-        el("div", { class: "field" }, el("label", { for: "city" }, "City"), cityInput),
-        el("div", { class: "field" }, el("label", { for: "state" }, "State"), stateInput),
-        el("div", { class: "field" }, el("label", { for: "country" }, "Country"), countryInput)
-      )
-    ),
-    el("button", { type: "submit" }, "Search")
+      "button",
+      { type: "submit", class: "search-submit" },
+      // el() builds nodes via createElement, which can't create real SVG
+      // elements -- this is the documented "html" escape hatch for a fixed,
+      // trusted string this codebase wrote itself (see dom.js).
+      el("span", {
+        class: "btn-icon",
+        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+      }),
+      "Search"
+    )
   );
 
   const statusEl = el("p", { id: "status", "aria-live": "polite" });
@@ -86,7 +139,7 @@ export function renderSearchView(container) {
   const nextBtn = el("button", { id: "next-page", type: "button", disabled: true }, "Next");
   const pagination = el("div", { id: "pagination" }, prevBtn, pageLabel, nextBtn);
 
-  mount(container, form, statusEl, resultsEl, pagination);
+  mount(container, hero, el("div", { class: "search-panel" }, form), statusEl, resultsEl, pagination);
 
   function setupAutocomplete(input, datalist, fetchFn) {
     let debounceTimer;

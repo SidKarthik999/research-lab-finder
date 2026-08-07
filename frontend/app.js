@@ -21,12 +21,24 @@ import { renderProfileView } from "./views/profile.js";
 const accountNavEl = document.getElementById("account-nav");
 const appEl = document.getElementById("app");
 
+function initials(user) {
+  const source = user.name || user.email || "?";
+  const parts = source.trim().split(/\s+/);
+  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : source.slice(0, 2);
+  return letters.toUpperCase();
+}
+
 function renderAccountNav() {
   const user = getCurrentUser();
   if (user) {
     mount(
       accountNavEl,
-      el("span", { class: "user-name" }, user.name || user.email),
+      el(
+        "span",
+        { class: "user-name" },
+        el("span", { class: "avatar" }, initials(user)),
+        user.name || user.email
+      ),
       el("a", { href: "#/profile" }, "Profile"),
       el(
         "button",

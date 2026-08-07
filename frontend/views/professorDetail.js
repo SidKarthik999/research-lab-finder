@@ -9,10 +9,13 @@
 // failure mode this feature can produce.
 
 import { el, mount } from "../dom.js";
-import { ApiError, generateProfessorSummary, getProfessor, getProfessorPublications } from "../api.js";
+import { ApiError, generateColdEmail, generateProfessorSummary, getProfessor, getProfessorPublications } from "../api.js";
 import { publicationList, renderContactLine, topicChips } from "../professor.js";
+import { getCurrentUser } from "../session.js";
 
 const AI_DISCLOSURE = "AI-generated from this professor's public research record — may be incomplete or imprecise.";
+const EMAIL_DISCLOSURE =
+  "AI-drafted from this professor's public research record and your student profile — review and edit before sending. The app drafts; you send.";
 
 export async function renderProfessorDetailView(container, params) {
   const professorId = params.id;
@@ -39,16 +42,34 @@ export async function renderProfessorDetailView(container, params) {
   }
 
   const location = [professor.city, professor.state, professor.country_code].filter(Boolean).join(", ");
+  const name = professor.professor_name || "Unknown professor";
+  const nameInitials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 
   mount(
     container,
     el("a", { href: "#/", class: "back-link" }, "← Back to search"),
-    el("h1", {}, professor.professor_name || "Unknown professor"),
-    el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
-    location ? el("p", { class: "meta" }, location) : null,
+    el(
+      "div",
+      { class: "detail-hero" },
+      el("span", { class: "avatar large", "aria-hidden": "true" }, nameInitials || "?"),
+      el(
+        "div",
+        { class: "detail-hero-text" },
+        el("h1", {}, name),
+        el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
+        location ? el("p", { class: "meta" }, location) : null
+      )
+    ),
     topicChips(professor.topics),
     renderContactLine(professor),
     el("div", { class: "card" }, renderSummarySection(professor, professorId)),
+    el("div", { class: "card" }, renderColdEmailSection(professorId)),
     el("div", { class: "card" }, el("h2", {}, "Publications"), publicationList(publications))
   );
 }
@@ -92,6 +113,71 @@ function renderSummarySection(professor, professorId) {
     },
     "Generate AI summary"
   );
+
+  wrapper.append(button, statusEl);
+  return wrapper;
+}
+
+function renderColdEmailSection(professorId) {
+  const wrapper = el("div", {}, el("h2", {}, "Draft a cold email"));
+
+  const user = getCurrentUser();
+  if (!user) {
+    wrapper.append(
+      el(
+        "p",
+        { class: "hint" },
+        "Sign in to draft a personalized email to this professor — ",
+        el("a", { href: "#/signin" }, "sign in"),
+        "."
+      )
+    );
+    return wrapper;
+  }
+
+  const statusEl = el("p", { class: "hint" });
+
+  const draftAction = async () => {
+    button.disabled = true;
+    button.textContent = "Regenerate draft";
+    statusEl.textContent = "Drafting…";
+    try {
+      const result = await generateColdEmail(professorId);
+      if (result.draft) {
+        statusEl.textContent = "";
+        renderDraft(result.draft);
+        return;
+      }
+      statusEl.textContent = "Not enough public data on file yet to draft an email for this professor.";
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422) {
+        statusEl.replaceChildren(
+          "Complete your student profile first — ",
+          el("a", { href: "#/profile" }, "fill it out here"),
+          "."
+        );
+      } else if (err instanceof ApiError && err.status === 503) {
+        statusEl.textContent = "Email drafting isn't turned on for this site yet.";
+      } else {
+        statusEl.textContent = `Couldn't draft an email: ${err.message}`;
+      }
+    }
+    button.disabled = false;
+  };
+
+  const button = el("button", { type: "button", class: "secondary", onClick: draftAction }, "Draft an email");
+
+  function renderDraft(body) {
+    const textarea = el("textarea", { rows: "12" });
+    textarea.value = body;
+    wrapper.replaceChildren(
+      el("h2", {}, "Draft a cold email"),
+      textarea,
+      el("p", { class: "hint" }, EMAIL_DISCLOSURE),
+      button,
+      statusEl
+    );
+  }
 
   wrapper.append(button, statusEl);
   return wrapper;

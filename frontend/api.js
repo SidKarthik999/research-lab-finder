@@ -79,6 +79,10 @@ export function generateProfessorSummary(id) {
   return request(`/api/professors/${id}/summary`, { method: "POST" });
 }
 
+export function generateColdEmail(id) {
+  return request(`/api/professors/${id}/cold-email`, { method: "POST" });
+}
+
 // --- auth ---
 
 export function getGoogleClientId() {
