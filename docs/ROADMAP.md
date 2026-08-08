@@ -1,13 +1,20 @@
 # Research Lab Finder — Roadmap
 
-**Last updated:** 2026-08-06
+**Last updated:** 2026-08-08
 
-> **Next up: Phase 5A** (professor profiles, AI summaries, cold emails, and
-> Google sign-in). Promoted ahead of Phases 3 and 4 on 2026-08-06 — see
-> "Suggested order" for why. Phase numbers are deliberately *not* renumbered:
-> several code comments (`src/ingestion/openalex.py`, migration headers)
-> already cite phase numbers, and silently shifting them would make those
-> comments point at the wrong thing.
+> **Next up: Phase 6** (shipping to real users). Phase 5A shipped in full on
+> 2026-08-07/08 — profiles, AI summaries, accounts, cold-email drafting,
+> bookmarking, and resume import are all live — and Phase 3's coverage
+> widening + Carnegie classification landed alongside it. Phase 6.1 (pooled
+> DB connections, `DATABASE_URL`, `/healthz`) is also already done. What's
+> left to actually put this in front of a student is the rest of Phase 6
+> (hosting, guardrails, trust/legal, monitoring) — **promoted ahead of
+> Phase 4 on 2026-08-08 at the user's direction**: the app should reach other
+> users before more content (labs) is added. See "Suggested order" for the
+> full reasoning. Phase numbers are deliberately *not* renumbered: several
+> code comments (`src/ingestion/openalex.py`, migration headers) already cite
+> phase numbers, and silently shifting them would make those comments point
+> at the wrong thing.
 
 ## The goal
 
@@ -19,26 +26,22 @@ credible email to a specific person who might say yes*."
 
 Every phase below is judged against that end-to-end path.
 
-## Where things stand (measured 2026-08-02, mid-Phase 2)
+## Where things stand (measured 2026-08-08, end of Phase 5A / Phase 3 coverage widening)
 
 | Table | Rows | Notes |
 |---|---|---|
-| `Institution` | 100 | all US, top 100 by OpenAlex works count |
-| `Professor` | 4,431 | ~top 50 per institution by works count |
-| `Publication` | 34,069 | 23,250 have abstracts, all with a full-text `search_vector` |
-| `ProfessorPublication` | 43,880 | safely attributed (per-author queries) |
-| `ResearchTopic` | 2,483 | from each professor's own OpenAlex Author.topics |
-| `ProfessorTopic` | 21,864 | across 4,377 professors (54 had zero topics from OpenAlex) |
-| `Lab` | 45 | hand-extracted pilot; Stanford + Cornell only |
-| `ProfessorLab` | 37 | |
+| `Institution` | ~1,764 | widened in Phase 3 from a fixed top-100 to every US educational institution above a works-count floor (`get_us_institutions`) |
+| `Professor` | ~196,000 | widened in Phase 3 from flat top-50-by-citations to top-cited-*per-field* per institution (`get_professors_at_institution_by_field`), so coverage isn't dominated by whichever field is most-cited overall |
+| `Publication` / `ProfessorTopic` / `ResearchTopic` | catching up | enrichment (topics, publications, ORCID) runs as a scheduled daily pipeline (`launchd/*.plist`) and is still working through the ~44x larger professor set; as of the recency-filter work only ~11% of professors had any `Publication` row yet — not inactivity, just enrichment lag |
+| `Institution.carnegie_classification` | ~78% matched | backfilled from ACE/Indiana University's real Carnegie Classification dataset (not a heuristic), matched by name+city token-Jaccard with a bounded LLM pass for the ambiguous band; left `NULL` rather than guessed when no same-city candidate exists |
+| `Lab` | 45 | unchanged since the hand-extracted pilot; Stanford + Cornell only — still the gap Phase 4 exists to close |
+| `AppUser` / `AuthIdentity` / `StudentProfile` / `EmailDraft` / `Bookmark` | live | accounts, cold-email drafts, and bookmarking shipped in Phase 5A (2026-08-07/08) |
+
+Because publication/topic enrichment is still catching up to the widened professor set, some things that depend on it (recency filtering, full-text search hit rate for newly-added institutions) are currently opt-in or partial rather than complete — see Phase 3 below.
 
 **Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text search over topics and publication full text (split into `name`/`text`/`topic`/`field`, replacing an earlier combined `q` that turned out to conflate several unrelated things — see commit history), and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips, a Field dropdown, field-scoped topic autocomplete, and an Advanced search section. 137 new tests (309 total).
 
-One honest caveat from Phase 1: the phase's own "done when" example (`computational neuroscience` + `Texas`) currently returns zero results — not a search bug, but a coverage gap. Only 4 of the 100 ingested institutions are in Texas, and "computational neuroscience" as an exact phrase doesn't overlap with any of their professors' topics/abstracts. Broader combinations (e.g. `neuroscience` + `California`, which has many more ingested institutions) work as intended. This is precisely the gap Phase 3 (coverage) exists to close.
-
-**Phase 2 is done**: `researcher_urls.py` backfilled `Professor.website` from ORCID's researcher-urls (653 of 3,621 ORCID holders had a usable one — most people don't add any). `emails.py` backfilled `Professor.email` from ORCID's public, ORCID-verified `emails` field (293 of 3,621 — only ~8% make an email public, but every one is opt-in-disclosed and verified, not scraped or guessed). The frontend contact panel also shows a Google Scholar author-search link and an institution site-search link, both computed on the fly from data already on hand — link wording and the Scholar query were both tuned after real usage turned up problems (see commit history: appending institution to the Scholar query regressed a real profile and was reverted; the directory link was relabeled since it's a search, not an actual directory).
-
-Professor contact coverage: **293 emails, 653 websites** (up from 0/0), 3,621 ORCIDs.
+**Phase 2 is done**: `researcher_urls.py` backfilled `Professor.website` from ORCID's researcher-urls. `emails.py` backfilled `Professor.email` from ORCID's public, ORCID-verified `emails` field. The frontend contact panel also shows a Google Scholar author-search link and an institution site-search link, both computed on the fly from data already on hand — link wording and the Scholar query were both tuned after real usage turned up problems (see commit history: appending institution to the Scholar query regressed a real profile and was reverted; the directory link was relabeled since it's a search, not an actual directory).
 
 ### What's working
 
@@ -59,23 +62,35 @@ correctness.
 1. ~~**Search doesn't cover research fields.**~~ **Fixed in Phase 1.**
    `/api/search` now filters by topic/field and full-text publication search.
 2. ~~**Nobody is contactable.**~~ **Fixed in Phase 2**, as much as it's going
-   to be without scraping. 653 of 4,431 professors have a website, 293 have a
-   verified public email (both from ORCID, nothing scraped or guessed), and
-   every result has computed Scholar/institution search links regardless.
+   to be without scraping — website/email from ORCID (nothing scraped or
+   guessed), plus computed Scholar/institution search links on every result.
    Most professors still won't have a direct email — that's a real ceiling
    of "what's legitimately public," not a to-do item.
-3. **Finding the right person isn't the same as being able to approach
-   them.** A result card is a name, an institution, and three topic chips.
-   A student who lands on the right professor still has to work out who they
-   are, whether their work is actually a fit, and what to say — which is the
-   step most of them stall on. This is what Phase 5A addresses, and it's now
-   the top of the critical path.
-4. **Coverage is the wrong slice.** Top-100 institutions × top-50 most-cited
-   faculty is elite- and medicine-skewed — close to the *least* accessible
-   population for an unknown student.
-5. **Labs don't scale.** 45 rows from two hand-pasted directory pages.
+3. ~~**Finding the right person isn't the same as being able to approach
+   them.**~~ **Fixed in Phase 5A** (2026-08-07/08). Every professor now has a
+   detail page with a full topic list, a cached AI summary, and a cold-email
+   draft grounded in both the student's saved profile and the professor's own
+   recent work. Accounts (multi-provider), bookmarking, saved/editable
+   drafts, and resume-PDF profile import all shipped alongside it.
+4. ~~**Coverage is the wrong slice.**~~ **Mostly fixed in Phase 3.**
+   Ingestion widened from a fixed top-100 to ~1,764 US educational
+   institutions, and from flat top-50-by-citations to top-cited-*per-field*,
+   so a regional/non-R1 school shows up instead of only the already-famous.
+   Real Carnegie Classification data is now attached and surfaced as a search
+   filter and badge. What's *not* finished: publication/topic enrichment is
+   still working through the much larger professor set (a background daily
+   pipeline, not a one-time job), so recency filtering stays opt-in until
+   that coverage catches up — see Phase 3 below.
+5. **Labs don't scale.** Still 45 rows from two hand-pasted directory pages —
+   untouched since the original pilot. This is Phase 4, now deliberately
+   *after* Phase 6: more content doesn't help until the app is somewhere
+   other people can reach it.
 6. **No opportunity signal.** Nothing records whether a PI or program actually
-   takes students, which is the fact a student most needs.
+   takes students, which is the fact a student most needs. (Phase 5B.)
+7. **Nobody outside this machine can use it.** The app only runs on
+   `localhost` — this is what Phase 6 closes, and per the user's direction on
+   2026-08-08, it now comes before Phase 4/5B/5C: get the existing product in
+   front of real students before adding more data or polish.
 
 ---
 
@@ -170,28 +185,44 @@ Instead:
 
 ---
 
-## Phase 3 — Coverage that matches the users
+## Phase 3 — Coverage that matches the users (mostly done)
 
 The current slice is the opposite of what an unknown student needs. A high
 schooler in Nebraska is not getting a lab spot from a top-50-cited Stanford
 PI; they are getting one from a regional state school twenty minutes away.
 
-- Widen ingestion beyond the top 100: all US `type=education` institutions
-  above a modest works threshold. Include masters- and bachelors-granting
-  institutions, not just R1s.
-- Lower the per-institution professor cap so coverage broadens rather than
-  deepening on the already-famous.
-- Add recency: store `last_publication_year` and filter to professors with a
-  work in roughly the last three years, so students don't email retired or
-  inactive PIs.
-- Add `Institution.type` / carnegie-style classification if available, so the
-  UI can offer "schools near me" rather than only "top schools".
-- The API already accepts a `country` filter — non-US expansion is a config
-  change once the US set is solid, not a rebuild.
+- ✅ **Widened ingestion beyond the top 100.** `get_us_institutions()` pulls
+  every US `type=education` institution above a works-count floor (~1,764
+  institutions, vs. the original fixed 100) — masters- and bachelors-granting
+  schools included, not just R1s.
+- ✅ **Per-institution professor selection is now per-field, not a flat cap.**
+  `get_professors_at_institution_by_field()` pulls top-cited-*per-field*
+  professors (20 for the largest ~100 institutions, 5 below that — smaller
+  schools often don't have 20 genuine matches in a given field), so coverage
+  isn't dominated by whichever field happens to be most-cited overall. This
+  took `Professor` from ~4,431 to ~196,000 rows.
+- ✅ **Institution classification, from real data, not a heuristic.**
+  `Institution.carnegie_classification` is backfilled from ACE/Indiana
+  University's actual Carnegie Classification dataset (matched by name+city,
+  not our own `works_count`), surfaced as both a search filter and a badge on
+  result cards/detail pages. This is the "schools near me" signal the
+  original bullet asked for.
+- ⚠️ **Recency filtering is opt-in, not default, and that's deliberate.**
+  `recent_only` (3-year cutoff) shipped, but making it default-on right now
+  would hide the large majority of the ~196k professors: publication/topic
+  enrichment is a background daily pipeline still working through the much
+  larger set (only ~11% had a `Publication` row as of this filter shipping),
+  so "no recent publication on file" mostly means "not enriched yet," not
+  "inactive." Revisit defaulting it on once that coverage is substantially
+  more complete — worth checking again once Phase 6 is done and the
+  pipeline's had more uninterrupted time to run.
+- **Not done, and not currently planned:** non-US expansion. The API already
+  accepts a `country` filter, so this is a config change whenever it becomes
+  a priority — no code blocks it.
 
 ---
 
-## Phase 4 — Labs, automated
+## Phase 4 — Labs, automated (not started; now scheduled after Phase 6)
 
 `src/ingestion/labs.py` already has the right *structure*: surname +
 first-initial matching scoped per institution, stub `Professor` creation for
@@ -212,12 +243,26 @@ and Works-derived labs are exactly what was rolled back).
 
 ---
 
-## Phase 5A — Profiles, AI summaries, and cold emails ← **next up**
+## Phase 5A — Profiles, AI summaries, and cold emails ✅ **done (2026-08-07/08)**
 
 Everything above builds a good directory. This is what makes it a *tool*, and
 it's the shortest remaining path to the goal stated at the top: *I have sent a
 credible email to a specific person who might say yes.* Phases 3 and 4 make
 the directory bigger; this one makes it act.
+
+**Shipped, including some things beyond the original plan below:** professor
+detail pages, cached AI summaries (on `gpt-5.4-nano`, swapped from Claude Opus
+5 after the feature was built — see `CLAUDE.md`), multi-provider accounts
+(Google + email/password) with the verified-email linking rule, student
+profiles, cold-email drafting grounded in both sides, and the full frontend
+groundwork (DOM helper, style primitives, ES module split). Two things were
+added that weren't in the original plan and are worth calling out:
+**professor bookmarking** (`Bookmark` table, saved per-student, each joined
+to its latest draft) with its own `#/bookmarks` page, and **resume PDF
+import** (`POST /api/me/resume`) that extracts profile fields via a
+structured-output LLM call and hands them to the frontend to review and save
+— never written to `StudentProfile` directly, same "app drafts, student
+decides" shape as the cold-email feature itself.
 
 **Professor detail view.** Today a professor is a card in a result list.
 Give each one a real page — reachable by clicking the card, with its own URL
@@ -292,7 +337,10 @@ writing those screens than to retrofit across all of them:
 
 **Done when** a signed-in student can go from a search result to a specific
 professor's page, read a summary that's accurate, and copy out an email that
-names a real paper and a real reason they're a fit.
+names a real paper and a real reason they're a fit. ✅ **This works
+end-to-end now** — the remaining gap to the top-of-file goal isn't the
+product, it's that only people with `localhost` access can try it, which is
+what Phase 6 closes.
 
 Per `CLAUDE.md`: these are new `/api/*` endpoints, and they stay opt-in from
 the frontend so the core search flow keeps zero external dependencies and no
@@ -359,7 +407,7 @@ can't be attributed to either one.
 
 ---
 
-## Phase 6 — Ship it
+## Phase 6 — Ship it ← **next up**
 
 Everything above assumes `localhost`. This phase is what stands between that
 and a URL a student can open. The architecture is already close — one process
@@ -367,45 +415,44 @@ serving API and UI on one origin — so most of the work is configuration,
 guardrails, and a handful of specific code changes that only matter once the
 database is somewhere else.
 
-### 6.1 — Code changes that block deployment
+**Promoted ahead of Phase 4 (and 5B/5C) on 2026-08-08, at the user's
+direction:** get the product that already works end-to-end in front of real
+users before adding more content (labs) or polish (redesign). Everything
+below this heading — 6.2 through 6.7 — is what's actually left; 6.1 already
+shipped.
 
-These are prerequisites, not polish. Nothing can deploy until they're done.
+### 6.1 — Code changes that block deployment ✅ **done (2026-08-07, `2c28df8`)**
 
-- **`get_connection()` cannot reach a remote database.** It hardcodes
-  `dbname` and `user` with no host, port, or password, relying on local
-  peer/trust auth. Replace with a `DATABASE_URL` env var (falling back to
-  today's local values so nothing breaks in development).
-- **Connection handling won't survive a managed instance.** The current
-  function caches one connection per thread in a `threading.local` and
-  reuses it forever. That's fine against local Postgres, and wrong against
-  a hosted one for two reasons: FastAPI runs sync endpoints in a threadpool
-  (~40 threads by default), so the app can hold ~40 permanent connections
-  against a plan that may cap at 20; and managed providers drop idle
-  connections, after which a cached handle can fail on next use without
-  `connection.closed` having flipped. Replace with `psycopg_pool.ConnectionPool`,
-  opened and closed in a FastAPI lifespan handler, with a bounded size and
-  liveness check on checkout.
-- **Secrets come from the environment, not a file.** `.env` + `python-dotenv`
-  stays for local dev; production reads `DATABASE_URL`, `OPENAI_API_KEY`,
-  `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, and the email-provider key from the
-  platform's secret store. Fail loudly at startup if any are missing rather
-  than at first request.
-- **Session cookies need production flags** — `Secure`, `HttpOnly`,
-  `SameSite=Lax` — set from an `ENV`/`DEBUG` flag so local HTTP still works.
-- **The migration path has never been run against an empty database.**
-  `001_initial_schema.sql` was written to be a safe no-op against the
-  already-live schema, which means the from-scratch case is untested. Verify
-  by creating a throwaway database and running `python -m database.migrate`
-  into it before trusting it as the deploy step.
-- **`/healthz`** returning 200 only if a database query succeeds, so the
-  platform restarts a container that's up but can't serve.
+These were prerequisites, not polish, and they're done: `get_connection()`
+now draws from a `psycopg_pool.ConnectionPool` keyed off `DATABASE_URL`
+(falling back to today's local values in dev), released via a
+`@db.with_connection` decorator on every DB-touching route — verified this
+was necessary rather than request-scoped middleware, since FastAPI runs sync
+dependencies and the sync endpoint body as separate threadpool calls with
+independently-copied context, so middleware couldn't see what either one
+checked out. Stress-tested at 40 concurrent requests / 80 checkouts against a
+pool of 10. `GET /healthz` (200 only on a real query) is live, and the
+migration path has been verified against a genuinely empty database for the
+first time. Session cookie flags (`Secure`, gated on `ENV=production`) landed
+alongside the accounts work in Phase 5A rather than here, since that's where
+the session gets created — see `backend/sessions.py`.
+
+One remaining open item from the original 6.1 list: **secrets still need to
+come from a real platform secret store in production** (`OPENAI_API_KEY`,
+`SESSION_SECRET`, `GOOGLE_CLIENT_ID`, the email-provider key), failing loudly
+at startup if any are missing — `.env` stays for local dev only. This is
+config for whichever host gets picked in 6.2, not a code change.
 
 ### 6.2 — Hosting shape
 
-- **Managed Postgres** (Neon, Supabase, Render, or Fly Postgres). The dataset
-  is small — ~4.4k professors, ~34k publications — so the cheapest tier is
-  genuinely sufficient; this is not a scale problem. Migrate with `pg_dump`
-  from local and `psql` restore into the managed instance.
+- **Managed Postgres** (Neon, Supabase, Render, or Fly Postgres). At ~1,764
+  institutions / ~196k professors the dataset is still small by Postgres
+  standards, so the cheapest tier is genuinely sufficient — this is not a
+  scale problem. Migrate with `pg_dump` from local and `psql` restore into
+  the managed instance. Note the dataset is meaningfully bigger than the
+  ~4.4k-professor estimate this bullet originally assumed, so sanity-check
+  storage/row limits on whichever free tier is picked before committing to
+  it.
 - **One container** running `uvicorn backend.main:app`, serving `/api/*` and
   mounting `frontend/` at `/`. No CORS, no separate static host, no CDN
   needed at this size. Render or Fly.io both do container + managed Postgres
@@ -441,11 +488,14 @@ silent.
 ### 6.4 — Guardrails before real users
 
 The LLM endpoints from Phase 5A change the risk profile. Without limits, one
-user or one script can spend real money on your API key.
+user or one script can spend real money on your API key. This now includes
+resume-PDF import (`POST /api/me/resume`), not just summaries and cold
+emails — it wasn't in the original plan below but calls the model on every
+upload, uncached, same as email drafting.
 
-- **Per-user daily cap on cold-email generation**, enforced server-side.
-  Summaries are naturally bounded because they cache after first view; email
-  drafting is not.
+- **Per-user daily cap on cold-email generation and resume import**, enforced
+  server-side. Summaries are naturally bounded because they cache after
+  first view; email drafting and resume import are not.
 - **A monthly spend alert** on the OpenAI account, so a runaway loop is
   discovered by a notification rather than an invoice.
 - **Rate limits on auth endpoints** (login, signup, password reset) by IP and
@@ -504,27 +554,35 @@ user telling you.
 1. ~~**Phase 0**~~ — done.
 2. ~~**Phase 1**~~ — done.
 3. ~~**Phase 2**~~ — done.
-4. **Phase 5A** — *current*. Search and contactability both work now, so the
-   remaining gap on the critical path isn't reach, it's that a student who
-   finds the right professor still has to figure out who they are and what to
-   say. Phases 3 and 4 scale a funnel that doesn't yet close; this closes it.
-   It's also the cheapest test of whether the end-to-end idea works at all —
-   if the generated emails aren't credible, that's worth learning before
-   ingesting another 900 institutions.
-5. **Phase 3** — broadens reach once the loop works end to end.
-6. **Phase 5B before Phase 4**, if the high school audience is a priority.
-7. **Phase 5C** — whenever. It's not on the critical path and blocks
-   nothing, but it should follow 5A rather than precede it.
-8. **Phase 6** — can come as early as right after 5A; it does not require
-   Phase 3's wider coverage or Phase 4's labs. Shipping a narrower product
-   to real users teaches more than either.
-
-Two caveats on ordering within Phase 6. The **6.1 code changes are cheaper
-during 5A than after it** — `DATABASE_URL` and the connection pool touch
-`get_connection()`, which every new endpoint in 5A will call, and the cookie
-flags are set where 5A creates the session. Do those two alongside 5A even if
-the deploy itself waits. Everything else in Phase 6 genuinely can wait until
-you're ready to ship.
+4. ~~**Phase 5A**~~ — done (2026-08-07/08). Profiles, AI summaries, accounts,
+   cold-email drafting, bookmarking, and resume import all shipped and work
+   end to end.
+5. ~~**Phase 3 (coverage widening + Carnegie classification)**~~ — done
+   alongside 5A. ~1,764 institutions, ~196k professors, per-field sampling,
+   real Carnegie data. Recency filtering stays opt-in until publication
+   enrichment catches up to the larger set (background daily pipeline,
+   ongoing — no action needed, just time).
+6. ~~**Phase 6.1**~~ — done (2026-08-07). Pooled connections, `DATABASE_URL`,
+   `/healthz`, empty-DB migration check.
+7. **Phase 6 (6.2–6.7) — next up, at the user's explicit request.** The
+   product works end to end on `localhost`; the only thing separating that
+   from "other people can use it" is hosting, secrets, guardrails, and the
+   trust/legal basics in 6.5. This is now prioritized **ahead of Phase 4**:
+   the goal is to get the app in front of other users before adding more
+   content. Suggested internal order: 6.2 (hosting shape) and the remaining
+   6.1 secrets item first, since nothing else in Phase 6 works without a
+   deployed target → 6.4 (guardrails) before opening it up publicly, since
+   the LLM endpoints are live and unmetered right now → 6.5 (trust/legal)
+   before real users, not after → 6.3 and 6.6 can trail slightly since
+   they're operational rather than blocking.
+8. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
+   until the app is somewhere other people can reach it; this was the
+   original point of promoting Phase 6.
+9. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
+   structured-program audience turns out to matter more than lab coverage
+   once there's real usage to look at).
+10. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
+    should keep following 5A/6 rather than precede them.
 
 ## Principles carried forward
 
