@@ -57,4 +57,5 @@ dependencies:
       - email-validator==2.3.0
       - openai==2.53.0
       - psycopg-pool==3.3.1
+      - openpyxl==3.1.5
 prefix: /Users/siddanthkarthik/miniconda3/envs/researchlabfinder

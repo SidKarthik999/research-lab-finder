@@ -145,6 +145,34 @@ def insert_institution(name, website=None, city=None, state=None, country_code=N
     return institution_id
 
 
+def get_institutions_without_carnegie_classification():
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT id, name, city, state
+    FROM Institution
+    WHERE carnegie_classification IS NULL
+    '''
+    cursor.execute(query)
+    institutions = cursor.fetchall()
+    cursor.close()
+    return institutions
+
+def update_institution_carnegie_classification(institution_id, classification, unitid, match_method):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Institution
+    SET carnegie_classification = %s,
+        carnegie_unitid = %s,
+        carnegie_match_method = %s,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (classification, unitid, match_method, institution_id))
+    connection.commit()
+    cursor.close()
+
 def insert_professor(name, email=None, orcid=None, website=None, institution_id=None, source=None, openalex_id=None):
     connection = get_connection()
     cursor = connection.cursor()
