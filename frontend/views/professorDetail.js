@@ -10,7 +10,7 @@
 
 import { el, mount } from "../dom.js";
 import { ApiError, generateColdEmail, generateProfessorSummary, getProfessor, getProfessorPublications } from "../api.js";
-import { publicationList, renderContactLine, topicChips } from "../professor.js";
+import { publicationList, renderContactLine, topicChips, institutionTypeBadge } from "../professor.js";
 import { getCurrentUser } from "../session.js";
 
 const AI_DISCLOSURE = "AI-generated from this professor's public research record — may be incomplete or imprecise.";
@@ -63,7 +63,8 @@ export async function renderProfessorDetailView(container, params) {
         { class: "detail-hero-text" },
         el("h1", {}, name),
         el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
-        location ? el("p", { class: "meta" }, location) : null
+        location ? el("p", { class: "meta" }, location) : null,
+        institutionTypeBadge(professor.carnegie_classification)
       )
     ),
     topicChips(professor.topics),

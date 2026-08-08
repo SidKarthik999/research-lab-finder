@@ -76,6 +76,7 @@ def build_search_query(
     topic=None,
     field=None,
     recent_only=False,
+    carnegie_classification=None,
     page=1,
     limit=20,
 ):
@@ -159,6 +160,15 @@ def build_search_query(
             )"""
         )
         params.append(f"%{field}%")
+    if carnegie_classification:
+        # Exact match, not ILIKE -- the values come from the
+        # /api/institution-classifications dropdown (see list_institution_classifications
+        # below), and several real labels are substrings of each other (e.g.
+        # "Doctoral Universities: High Research Activity" is a substring of
+        # "...Very High Research Activity"), so a partial match would
+        # silently conflate genuinely different tiers.
+        conditions.append("Institution.carnegie_classification = %s")
+        params.append(carnegie_classification)
     if recent_only:
         # A fixed interval, not a %s placeholder -- RECENT_YEARS_CUTOFF is a
         # server-side constant, never user input, so there's nothing here
@@ -209,6 +219,7 @@ def build_search_query(
         Institution.city,
         Institution.state,
         Institution.country_code,
+        Institution.carnegie_classification,
         COALESCE(topic_rank.topic_score, 0) AS topic_score,
         COALESCE(text_rank.rank, 0) AS text_rank,
         recency.last_publication_date,
@@ -273,6 +284,9 @@ def search_professors(
     recent_only: bool = Query(
         False, description="Only professors with a publication in the last few years"
     ),
+    carnegie_classification: str | None = Query(
+        None, description="Filter by the institution's Carnegie Classification, e.g. 'Doctoral Universities: Very High Research Activity'"
+    ),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -286,6 +300,7 @@ def search_professors(
         topic=topic,
         field=field,
         recent_only=recent_only,
+        carnegie_classification=carnegie_classification,
         page=page,
         limit=limit,
     )
@@ -312,6 +327,27 @@ def list_fields():
     fields = [row[0] for row in cursor.fetchall()]
     cursor.close()
     return {"fields": fields}
+
+
+@app.get("/api/institution-classifications")
+@db.with_connection
+def list_institution_classifications():
+    # Same shape as /api/fields: a small, fixed set of values (Carnegie's
+    # own Basic Classification taxonomy, ~33 possible labels, a subset of
+    # which actually appear in our data) -- a dropdown, not an
+    # autocomplete-as-you-type box. Only ~78% of institutions have been
+    # matched (see src/ingestion/carnegie.py); this only returns values that
+    # actually appear, so the dropdown never offers an option that would
+    # return zero results.
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        "SELECT DISTINCT carnegie_classification FROM Institution "
+        "WHERE carnegie_classification IS NOT NULL ORDER BY carnegie_classification;"
+    )
+    classifications = [row[0] for row in cursor.fetchall()]
+    cursor.close()
+    return {"classifications": classifications}
 
 
 @app.get("/api/topics")
@@ -400,7 +436,8 @@ def professor_detail(professor_id: int):
             Institution.website AS institution_website,
             Institution.city,
             Institution.state,
-            Institution.country_code
+            Institution.country_code,
+            Institution.carnegie_classification
         FROM Professor
         LEFT JOIN Institution ON Institution.id = Professor.institution_id
         WHERE Professor.id = %s;

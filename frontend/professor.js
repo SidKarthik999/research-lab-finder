@@ -6,6 +6,15 @@
 
 import { el, mount } from "./dom.js";
 
+// Only ~78% of institutions have a Carnegie Classification match (see
+// src/ingestion/carnegie.py) -- returns null rather than a placeholder
+// badge for the rest, same "absent beats wrong" convention as the rest of
+// this project rather than implying "uncategorized" is itself a category.
+export function institutionTypeBadge(classification) {
+  if (!classification) return null;
+  return el("span", { class: "institution-type-badge" }, classification);
+}
+
 export function institutionDomain(url) {
   if (!url) return null;
   try {

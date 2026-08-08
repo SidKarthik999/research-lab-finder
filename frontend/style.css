@@ -753,6 +753,22 @@ button.ghost:hover {
   margin: 0.25rem 0;
 }
 
+/* Deliberately not a topic-chip-style accent color -- this is a factual
+   institution-level label (from real Carnegie Classification data, not a
+   relevance match like a topic chip), so it reads as neutral metadata
+   rather than another colorful tag competing with the topic chips. */
+.institution-type-badge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
 .result-card .topics {
   font-size: 0.85rem;
   margin-top: 0.6rem;

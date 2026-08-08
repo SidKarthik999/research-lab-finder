@@ -14,6 +14,7 @@ FILTER_KWARGS = {
     "topic": "Neuroscience",
     "field": "Biology",
     "recent_only": True,
+    "carnegie_classification": "Doctoral Universities: Very High Research Activity",
 }
 
 
@@ -100,3 +101,17 @@ def test_recent_only_uses_exists_clause_with_no_extra_placeholder():
 def test_recent_only_combined_with_another_filter_still_matches_placeholder_count():
     sql, params = build_search_query(recent_only=True, topic="Neuroscience", limit=5)
     assert placeholder_count(sql) == len(params)
+
+
+def test_carnegie_classification_uses_exact_match_not_ilike():
+    # Several real Carnegie labels are substrings of each other (e.g. "...
+    # High Research Activity" is a substring of "...Very High Research
+    # Activity") -- ILIKE would silently conflate different tiers, so this
+    # must be an exact match.
+    sql, params = build_search_query(
+        carnegie_classification="Doctoral Universities: High Research Activity", limit=5
+    )
+    assert "Institution.carnegie_classification = %s" in sql
+    assert "Institution.carnegie_classification ILIKE" not in sql
+    assert "Doctoral Universities: High Research Activity" in params
+    assert "%Doctoral Universities: High Research Activity%" not in params

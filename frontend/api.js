@@ -65,6 +65,10 @@ export function listFields() {
   return request("/api/fields");
 }
 
+export function listInstitutionClassifications() {
+  return request("/api/institution-classifications");
+}
+
 // --- professors ---
 
 export function getProfessor(id) {
