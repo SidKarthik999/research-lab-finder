@@ -546,6 +546,37 @@ button.chip-button:hover {
   }
 }
 
+.checkbox-field {
+  grid-column: 1 / -1;
+}
+
+.checkbox-field label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.checkbox-field input[type="checkbox"] {
+  /* Resets the padding/border/background/radius the shared
+     input,select,textarea rule applies -- those are meant for text-style
+     fields and distort a native checkbox's own rendering. */
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.checkbox-field .hint {
+  margin-top: 0.25rem;
+  margin-left: 1.5rem;
+}
+
 /* --- Buttons --- */
 
 button {

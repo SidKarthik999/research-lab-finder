@@ -13,6 +13,7 @@ FILTER_KWARGS = {
     "country": "US",
     "topic": "Neuroscience",
     "field": "Biology",
+    "recent_only": True,
 }
 
 
@@ -78,3 +79,24 @@ def test_field_filter_uses_exists_clause():
     sql, params = build_search_query(field="Biology", limit=5)
     assert "EXISTS" in sql
     assert "%Biology%" in params
+
+
+def test_recent_only_defaults_to_off():
+    sql, _ = build_search_query(page=1, limit=20)
+    assert "publication_date >=" not in sql
+
+
+def test_recent_only_uses_exists_clause_with_no_extra_placeholder():
+    # A fixed interval baked into the SQL text, not user input, so opting in
+    # shouldn't add a %s placeholder -- only the two publication-search rank
+    # placeholders (always present) should show up in params.
+    sql, params = build_search_query(recent_only=True, limit=5)
+    assert "EXISTS" in sql
+    assert "publication_date >=" in sql
+    assert "INTERVAL" in sql
+    assert params == [None, None, 5, 0]
+
+
+def test_recent_only_combined_with_another_filter_still_matches_placeholder_count():
+    sql, params = build_search_query(recent_only=True, topic="Neuroscience", limit=5)
+    assert placeholder_count(sql) == len(params)

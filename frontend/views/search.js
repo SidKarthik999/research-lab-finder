@@ -43,6 +43,7 @@ export function renderSearchView(container) {
   const cityInput = el("input", { type: "text", id: "city", name: "city" });
   const stateInput = el("input", { type: "text", id: "state", name: "state" });
   const countryInput = el("input", { type: "text", id: "country", name: "country" });
+  const recentOnlyInput = el("input", { type: "checkbox", id: "recent_only", name: "recent_only" });
 
   const hero = el(
     "div",
@@ -100,6 +101,21 @@ export function renderSearchView(container) {
         el("div", { class: "field" }, el("label", { for: "city" }, "City"), cityInput),
         el("div", { class: "field" }, el("label", { for: "state" }, "State"), stateInput),
         el("div", { class: "field" }, el("label", { for: "country" }, "Country"), countryInput)
+      ),
+      el(
+        "div",
+        { class: "checkbox-field" },
+        el(
+          "label",
+          { for: "recent_only" },
+          recentOnlyInput,
+          "Only show recently active researchers (published in the last few years)"
+        ),
+        el(
+          "p",
+          { class: "hint" },
+          "Publication data is still being filled in for many professors, so this may hide people who are actually active."
+        )
       )
     )
   );

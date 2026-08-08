@@ -64,6 +64,8 @@ app.add_middleware(
 app.include_router(auth_router)
 
 
+RECENT_YEARS_CUTOFF = 3
+
 def build_search_query(
     name=None,
     text=None,
@@ -73,6 +75,7 @@ def build_search_query(
     country=None,
     topic=None,
     field=None,
+    recent_only=False,
     page=1,
     limit=20,
 ):
@@ -89,6 +92,19 @@ def build_search_query(
     what it uniquely offered -- searching by a professor's own name, and
     free-text search over publication abstracts (finer-grained than the
     curated topic taxonomy) -- are kept as two clearly-scoped filters instead.
+
+    recent_only is opt-in (default False), not a default-on filter, even
+    though the roadmap's Phase 3 goal is exactly "don't surface retired/
+    inactive PIs". As of the Phase 3 coverage widening (100 -> 1,768
+    institutions, ~4.4k -> ~196k professors), publication ingestion is still
+    catching up -- only ~11% of professors have any Publication row yet, not
+    because the other 89% are inactive, but because the enrichment pipeline
+    hasn't reached them. A default-on filter would silently hide the large
+    majority of real, active professors behind incomplete data -- the same
+    "absent beats wrong" reasoning as everywhere else in this project, just
+    applied to a filter rather than a stored fact. Once publication coverage
+    is substantially more complete, revisit whether this should flip to
+    default-on.
     """
     conditions = []
     params = []
@@ -143,6 +159,18 @@ def build_search_query(
             )"""
         )
         params.append(f"%{field}%")
+    if recent_only:
+        # A fixed interval, not a %s placeholder -- RECENT_YEARS_CUTOFF is a
+        # server-side constant, never user input, so there's nothing here
+        # that needs parameterizing.
+        conditions.append(
+            f"""EXISTS (
+                SELECT 1 FROM ProfessorPublication pp
+                JOIN Publication pub ON pub.id = pp.publication_id
+                WHERE pp.professor_id = Professor.id
+                  AND pub.publication_date >= CURRENT_DATE - INTERVAL '{RECENT_YEARS_CUTOFF} years'
+            )"""
+        )
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     offset = (page - 1) * limit
@@ -242,6 +270,9 @@ def search_professors(
     country: str | None = None,
     topic: str | None = Query(None, description="Filter by research topic name"),
     field: str | None = Query(None, description="Filter by research field, e.g. 'Physics and Astronomy'"),
+    recent_only: bool = Query(
+        False, description="Only professors with a publication in the last few years"
+    ),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -254,6 +285,7 @@ def search_professors(
         country=country,
         topic=topic,
         field=field,
+        recent_only=recent_only,
         page=page,
         limit=limit,
     )
