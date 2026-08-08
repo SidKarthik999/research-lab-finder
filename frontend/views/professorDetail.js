@@ -18,6 +18,7 @@ import {
   getProfessor,
   getProfessorPublications,
   unbookmarkProfessor,
+  updateColdEmailDraft,
 } from "../api.js";
 import { publicationList, renderContactLine, topicChips, institutionTypeBadge } from "../professor.js";
 import { getCurrentUser } from "../session.js";
@@ -86,7 +87,7 @@ export async function renderProfessorDetailView(container, params) {
     topicChips(professor.topics),
     renderContactLine(professor),
     el("div", { class: "card" }, renderSummarySection(professor, professorId)),
-    el("div", { class: "card" }, renderColdEmailSection(professorId, existingDrafts[0]?.body)),
+    el("div", { class: "card" }, renderColdEmailSection(professorId, existingDrafts[0])),
     el("div", { class: "card" }, el("h2", {}, "Publications"), publicationList(publications))
   );
 }
@@ -164,7 +165,7 @@ function renderSummarySection(professor, professorId) {
   return wrapper;
 }
 
-function renderColdEmailSection(professorId, existingDraftBody) {
+function renderColdEmailSection(professorId, existingDraft) {
   const wrapper = el("div", {}, el("h2", {}, "Draft a cold email"));
 
   const user = getCurrentUser();
@@ -191,7 +192,7 @@ function renderColdEmailSection(professorId, existingDraftBody) {
       const result = await generateColdEmail(professorId);
       if (result.draft) {
         statusEl.textContent = "";
-        renderDraft(result.draft);
+        renderDraft(result.draft, result.draft_id);
         return;
       }
       statusEl.textContent = "Not enough public data on file yet to draft an email for this professor.";
@@ -214,18 +215,45 @@ function renderColdEmailSection(professorId, existingDraftBody) {
   const button = el(
     "button",
     { type: "button", class: "secondary", onClick: draftAction },
-    existingDraftBody ? "Regenerate draft" : "Draft an email"
+    existingDraft ? "Regenerate draft" : "Draft an email"
   );
 
-  function renderDraft(body) {
+  function renderDraft(body, draftId) {
+    // savedBody tracks whatever's actually persisted server-side, so the
+    // save button's visibility reflects "does the box differ from what's
+    // saved", not just "has this textarea ever been touched".
+    let savedBody = body;
+
     const textarea = el("textarea", { rows: "12" });
     textarea.value = body;
+
+    const saveStatusEl = el("p", { class: "hint save-status" });
+    const saveBtn = el("button", { type: "button", class: "save-draft-button", hidden: true }, "Save changes");
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveStatusEl.textContent = "Saving…";
+      try {
+        await updateColdEmailDraft(professorId, draftId, textarea.value);
+        savedBody = textarea.value;
+        saveBtn.hidden = true;
+        saveStatusEl.textContent = "Saved.";
+      } catch (err) {
+        saveStatusEl.textContent = `Couldn't save: ${err.message}`;
+      }
+      saveBtn.disabled = false;
+    });
+    textarea.addEventListener("input", () => {
+      saveBtn.hidden = textarea.value === savedBody;
+      if (saveStatusEl.textContent === "Saved.") saveStatusEl.textContent = "";
+    });
+
     wrapper.replaceChildren(
       el("h2", {}, "Draft a cold email"),
       textarea,
       el("p", { class: "hint" }, EMAIL_DISCLOSURE),
-      button,
-      statusEl
+      el("div", { class: "draft-actions" }, button, saveBtn),
+      statusEl,
+      saveStatusEl
     );
   }
 
@@ -234,8 +262,8 @@ function renderColdEmailSection(professorId, existingDraftBody) {
   // otherwise a generated draft was effectively invisible again the moment
   // you navigated away and back, since it was only ever written to the DB,
   // never read back anywhere in the UI until now.
-  if (existingDraftBody) {
-    renderDraft(existingDraftBody);
+  if (existingDraft) {
+    renderDraft(existingDraft.body, existingDraft.id);
     return wrapper;
   }
 

@@ -91,6 +91,10 @@ export function getColdEmailDrafts(id) {
   return request(`/api/professors/${id}/cold-email`);
 }
 
+export function updateColdEmailDraft(id, draftId, body) {
+  return request(`/api/professors/${id}/cold-email`, { method: "PUT", body: { draft_id: draftId, body } });
+}
+
 export function bookmarkProfessor(id) {
   return request(`/api/professors/${id}/bookmark`, { method: "POST" });
 }

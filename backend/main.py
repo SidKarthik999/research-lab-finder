@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import ForeignKeyViolation
+from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import router as auth_router
@@ -571,6 +572,24 @@ def professor_cold_email_drafts(professor_id: int, user=Depends(current_user)):
     # navigated away and back. Most recent first.
     drafts = db.get_email_drafts_for_professor(user[0], professor_id)
     return {"drafts": [{"id": draft_id, "body": body, "created_at": created_at} for draft_id, body, created_at in drafts]}
+
+
+class ColdEmailEditRequest(BaseModel):
+    draft_id: int
+    body: str
+
+
+@app.put("/api/professors/{professor_id}/cold-email")
+@db.with_connection
+def edit_cold_email_draft(professor_id: int, payload: ColdEmailEditRequest, user=Depends(current_user)):
+    # Saves the student's own hand-edits to a draft in place -- a manual
+    # edit is a revision of the current draft, not a new AI generation, so
+    # this updates the existing row rather than inserting another one (only
+    # POST, an actual regeneration, adds a new EmailDraft row).
+    updated = db.update_email_draft(payload.draft_id, user[0], professor_id, payload.body)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return {"draft_id": payload.draft_id, "body": payload.body}
 
 
 @app.post("/api/professors/{professor_id}/cold-email")

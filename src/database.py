@@ -786,6 +786,25 @@ def get_email_drafts_for_professor(user_id, professor_id):
     cursor.close()
     return drafts
 
+def update_email_draft(draft_id, user_id, professor_id, body):
+    # user_id and professor_id are both in the WHERE clause, not just the
+    # primary key -- draft_id alone came from the client, so this is what
+    # actually stops one student from editing another's draft (or a draft
+    # under the wrong professor) by guessing/tampering with an id.
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE EmailDraft
+    SET body = %s
+    WHERE id = %s AND user_id = %s AND professor_id = %s
+    RETURNING id;
+    '''
+    cursor.execute(query, (body, draft_id, user_id, professor_id))
+    updated = cursor.fetchone() is not None
+    connection.commit()
+    cursor.close()
+    return updated
+
 def insert_bookmark(user_id, professor_id):
     connection = get_connection()
     cursor = connection.cursor()

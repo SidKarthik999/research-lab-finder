@@ -17,6 +17,7 @@ import {
   renderVerifyEmailView,
 } from "./views/auth.js";
 import { renderProfileView } from "./views/profile.js";
+import { renderBookmarksView } from "./views/bookmarks.js";
 
 const accountNavEl = document.getElementById("account-nav");
 const appEl = document.getElementById("app");
@@ -48,6 +49,7 @@ function renderAccountNav() {
       "div",
       { class: "account-menu", hidden: true },
       el("a", { href: "#/profile" }, "Profile"),
+      el("a", { href: "#/bookmarks" }, "Bookmarks"),
       el(
         "button",
         {
@@ -101,6 +103,7 @@ registerRoute("/forgot-password", renderForgotPasswordView);
 registerRoute("/reset-password", renderResetPasswordView);
 registerRoute("/verify-email", renderVerifyEmailView);
 registerRoute("/profile", renderProfileView);
+registerRoute("/bookmarks", renderBookmarksView);
 
 // Registered before initSession() runs, so its internal notify() call
 // already covers the first render -- no separate initial call needed.

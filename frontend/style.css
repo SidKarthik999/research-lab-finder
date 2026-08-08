@@ -393,6 +393,22 @@ textarea {
   resize: none;
 }
 
+/* Cold-email draft box: "Save changes" sits on the same row as "Regenerate
+   draft" rather than under the textarea on its own line -- it only appears
+   once the text actually differs from what's saved (see professorDetail.js
+   -- toggled via the textarea's `input` event, not always visible), so the
+   row's width just grows to fit it rather than reflowing awkwardly. */
+.draft-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.save-draft-button {
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+}
+
 .hint {
   font-size: 0.78rem;
   color: var(--muted);
@@ -951,27 +967,20 @@ button.ghost:hover {
   gap: var(--space-4);
 }
 
-.bookmark-item {
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border);
-}
-
-.bookmark-item:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.bookmark-item h3 {
+/* Each bookmark is its own top-level card now (a dedicated #/bookmarks
+   page), not a row inside one big card -- .card already supplies the
+   border/shadow/padding, this just sizes the heading like a result card's. */
+.bookmark-item h2 {
   margin: 0 0 0.2rem;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
 }
 
-.bookmark-item h3 a {
+.bookmark-item h2 a {
   color: var(--fg);
   text-decoration: none;
 }
 
-.bookmark-item h3 a:hover {
+.bookmark-item h2 a:hover {
   color: var(--accent);
 }
 
