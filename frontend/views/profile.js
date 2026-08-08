@@ -6,7 +6,7 @@
 // one long scroll mixing "things I saved" with "my own info".
 
 import { el, mount } from "../dom.js";
-import { getProfile, updateProfile } from "../api.js";
+import { ApiError, getProfile, importResume, updateProfile } from "../api.js";
 import { getCurrentUser } from "../session.js";
 
 function formField(labelText, inputEl, hint) {
@@ -85,6 +85,61 @@ export async function renderProfileView(container) {
     profile.looking_for || ""
   );
 
+  // Only overwrites a field when the resume actually had something for
+  // it -- extract_profile_from_resume() (backend/llm.py) returns null for
+  // anything it isn't confident about, and this preserves that: a field
+  // the student already filled in manually is left alone rather than
+  // blanked out by a resume that simply didn't mention it.
+  function applyExtractedProfile(extracted) {
+    if (extracted.level) levelSelect.value = extracted.level;
+    if (extracted.school) schoolInput.value = extracted.school;
+    if (extracted.graduation_year) gradYearInput.value = extracted.graduation_year;
+    if (extracted.coursework) courseworkInput.value = extracted.coursework;
+    if (extracted.skills) skillsInput.value = extracted.skills;
+    if (extracted.prior_experience) priorExperienceInput.value = extracted.prior_experience;
+    if (extracted.looking_for) lookingForInput.value = extracted.looking_for;
+  }
+
+  const resumeInput = el("input", { type: "file", id: "resume-upload", accept: "application/pdf,.pdf" });
+  const resumeStatusEl = el("p", { class: "hint" });
+  const resumeImportBtn = el("button", { type: "button", class: "secondary" }, "Fill in from resume");
+  resumeImportBtn.addEventListener("click", async () => {
+    const file = resumeInput.files[0];
+    if (!file) {
+      resumeStatusEl.textContent = "Choose a PDF file first.";
+      return;
+    }
+    resumeImportBtn.disabled = true;
+    resumeStatusEl.textContent = "Reading your resume…";
+    try {
+      const extracted = await importResume(file);
+      applyExtractedProfile(extracted);
+      resumeStatusEl.textContent = "Filled in what we could find below — review it, then save.";
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422) {
+        resumeStatusEl.textContent = err.message;
+      } else if (err instanceof ApiError && err.status === 503) {
+        resumeStatusEl.textContent = "Resume import isn't turned on for this site yet.";
+      } else {
+        resumeStatusEl.textContent = `Couldn't read that resume: ${err.message}`;
+      }
+    }
+    resumeImportBtn.disabled = false;
+  });
+
+  const resumeSection = el(
+    "div",
+    { class: "card" },
+    el("h2", {}, "Import from resume"),
+    el(
+      "p",
+      { class: "hint" },
+      "Upload a PDF resume and we'll fill in what we can find below from it — nothing is saved until you review it and click Save profile."
+    ),
+    el("div", { class: "resume-upload-row" }, resumeInput, resumeImportBtn),
+    resumeStatusEl
+  );
+
   const errorEl = el("p", { class: "form-error", hidden: true });
   const successEl = el("p", { class: "form-success", hidden: true });
 
@@ -132,6 +187,8 @@ export async function renderProfileView(container) {
   mount(
     container,
     el("h1", {}, "Your profile"),
+    resumeSection,
+    el("h2", {}, "Your info"),
     el(
       "p",
       { class: "hint" },

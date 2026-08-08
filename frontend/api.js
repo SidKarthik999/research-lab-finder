@@ -21,14 +21,7 @@ function toQueryString(params) {
   return qs ? `?${qs}` : "";
 }
 
-async function request(path, { method = "GET", body } = {}) {
-  const response = await fetch(path, {
-    method,
-    credentials: "include",
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
+async function parseJsonResponse(response) {
   const text = await response.text();
   let data = null;
   if (text) {
@@ -45,6 +38,27 @@ async function request(path, { method = "GET", body } = {}) {
   }
 
   return data;
+}
+
+async function request(path, { method = "GET", body } = {}) {
+  const response = await fetch(path, {
+    method,
+    credentials: "include",
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return parseJsonResponse(response);
+}
+
+// Separate from request() -- a file upload sends multipart/form-data, not
+// JSON, and the browser has to set that Content-Type header itself (it
+// includes a boundary value request() has no way to generate), so this
+// can't just be another `body` shape through the same function.
+async function uploadFile(path, file, fieldName) {
+  const formData = new FormData();
+  formData.append(fieldName, file);
+  const response = await fetch(path, { method: "POST", credentials: "include", body: formData });
+  return parseJsonResponse(response);
 }
 
 // --- search ---
@@ -158,4 +172,8 @@ export function updateProfile(data) {
 
 export function getBookmarks() {
   return request("/api/me/bookmarks");
+}
+
+export function importResume(file) {
+  return uploadFile("/api/me/resume", file, "file");
 }

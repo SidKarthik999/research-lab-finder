@@ -23,9 +23,12 @@ wrong paragraph about them is the worst failure mode this feature can
 produce. See CLAUDE.md / docs/ROADMAP.md Phase 5A.
 """
 
+import io
+import json
 import os
 
 import openai
+import pypdf
 
 MODEL = "gpt-5.4-nano"
 MAX_ABSTRACT_CHARS = 600
@@ -250,3 +253,138 @@ def generate_cold_email(student_name, student_profile, professor_name, instituti
     if response.status == "incomplete" or not response.output_text:
         raise ColdEmailGenerationRefused()
     return response.output_text.strip()
+
+
+# --- Resume import (profile auto-fill) ---
+#
+# Same grounding principle as the summary/cold-email prompts above, applied
+# to the student's own resume instead of a professor's public record: only
+# extract what the resume actually states, never infer or pad a field that
+# isn't clearly supported by the text. Uses the Responses API's structured
+# JSON-schema output (not free text this module parses itself) so a field
+# is either a real extracted value or explicitly null -- never a
+# free-text answer that has to be guessed at afterward. The frontend only
+# fills in the fields that come back non-null, leaving the rest of the form
+# untouched, and everything is editable before the student saves it -- same
+# "the app drafts, the student sends" shape as the cold-email feature.
+
+MAX_RESUME_CHARS = 12000
+
+
+class ResumePdfUnreadable(Exception):
+    """The PDF has no extractable text layer (e.g. a scanned image), or
+    isn't a valid PDF at all. Caught explicitly rather than letting a
+    pypdf-internal error surface, since either way the right response is
+    "we can't read this file", not a stack trace."""
+
+
+def extract_text_from_pdf(pdf_bytes):
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception:
+        raise ResumePdfUnreadable()
+
+    # A scanned/image-only PDF "succeeds" at the library level but yields
+    # no real text -- a handful of stray characters isn't enough to extract
+    # anything meaningful from, so it's treated the same as unreadable.
+    if len(text.strip()) < 50:
+        raise ResumePdfUnreadable()
+    return text
+
+
+RESUME_SYSTEM_PROMPT = """\
+You extract structured profile information from a student's resume, for a \
+research-opportunity platform. Extract ONLY what is explicitly stated in \
+the resume text -- never infer, guess, or pad in information that isn't \
+directly supported by the text. Leaving a field null is correct and \
+expected whenever the resume doesn't clearly support a value; it's the \
+same amount of information as a wrong guess would have been useful, minus \
+the risk of being wrong.
+
+Fields to extract:
+- level: one of "high school", "undergraduate", "graduate", "other" -- only \
+set this if the resume clearly indicates the student's current level (a \
+listed high school with an expected graduation year, an enrolled \
+bachelor's/undergraduate program, a master's/PhD program). Leave it null \
+if ambiguous.
+- school: the student's current school or university name, if stated.
+- graduation_year: the student's expected or actual graduation year, only \
+if explicitly written down. Never calculate or estimate one.
+- coursework: a short list of classes, labs, or academic projects relevant \
+to research, drawn only from what's listed on the resume.
+- skills: programming languages, lab techniques, and tools explicitly \
+listed on the resume.
+- prior_experience: a brief, factual summary of research or relevant work \
+experience described on the resume, in plain terms -- don't embellish or \
+editorialize about how impressive it is.
+- looking_for: only fill this in if the resume states an explicit \
+objective or interest (e.g. an "Objective" section). Most resumes don't \
+have this -- null is the expected, correct answer far more often than not.\
+"""
+
+RESUME_EXTRACTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "level": {
+            "type": ["string", "null"],
+            "enum": ["high school", "undergraduate", "graduate", "other", None],
+        },
+        "school": {"type": ["string", "null"]},
+        "graduation_year": {"type": ["integer", "null"]},
+        "coursework": {"type": ["string", "null"]},
+        "skills": {"type": ["string", "null"]},
+        "prior_experience": {"type": ["string", "null"]},
+        "looking_for": {"type": ["string", "null"]},
+    },
+    "required": ["level", "school", "graduation_year", "coursework", "skills", "prior_experience", "looking_for"],
+    "additionalProperties": False,
+}
+
+
+class ResumeExtractionNotConfigured(Exception):
+    """OPENAI_API_KEY isn't set."""
+
+
+class ResumeExtractionFailed(Exception):
+    """The model declined, returned no text, or returned something that
+    doesn't parse as the expected JSON shape -- treated the same as a
+    refusal rather than trusted."""
+
+
+def build_resume_extraction_prompt(resume_text):
+    text = resume_text.strip()
+    if len(text) > MAX_RESUME_CHARS:
+        text = text[:MAX_RESUME_CHARS].rstrip() + "..."
+    return f"Resume text:\n\n{text}\n\nExtract the profile fields now."
+
+
+def extract_profile_from_resume(resume_text):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise ResumeExtractionNotConfigured()
+
+    client = openai.OpenAI()
+    prompt = build_resume_extraction_prompt(resume_text)
+    response = client.responses.create(
+        model=MODEL,
+        instructions=RESUME_SYSTEM_PROMPT,
+        input=prompt,
+        max_output_tokens=800,
+        reasoning={"effort": "none"},
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "student_profile",
+                "schema": RESUME_EXTRACTION_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+
+    if response.status == "incomplete" or not response.output_text:
+        raise ResumeExtractionFailed()
+
+    try:
+        return json.loads(response.output_text)
+    except (json.JSONDecodeError, TypeError):
+        raise ResumeExtractionFailed()

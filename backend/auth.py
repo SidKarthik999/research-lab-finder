@@ -18,11 +18,18 @@ already exists under that email.
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, EmailStr
 
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
+from backend.llm import (
+    ResumeExtractionFailed,
+    ResumeExtractionNotConfigured,
+    ResumePdfUnreadable,
+    extract_profile_from_resume,
+    extract_text_from_pdf,
+)
 from backend.security import hash_password, verify_password
 from backend.sessions import current_user, log_in, log_out
 from backend.tokens import (
@@ -270,6 +277,45 @@ def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
         looking_for=body.looking_for,
     )
     return _profile_public(db.get_student_profile(user_id))
+
+
+MAX_RESUME_BYTES = 5 * 1024 * 1024  # 5MB -- plenty for a text-based resume PDF
+
+
+@router.post("/api/me/resume")
+@db.with_connection
+def import_resume(file: UploadFile = File(...), user=Depends(current_user)):
+    # This only returns extracted fields -- it never calls
+    # upsert_student_profile itself. The frontend fills the form with
+    # whatever came back non-null and the student still reviews and clicks
+    # Save, same as every other AI-generated content in this app: the app
+    # drafts, the student decides what actually gets saved.
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+
+    # file.file is the underlying (possibly disk-spooled) file object --
+    # read synchronously here rather than the async UploadFile.read(),
+    # since this route is a plain `def` like every other route in this app
+    # (so @db.with_connection's checkout/release stays inside one call --
+    # see src/database.py -- rather than needing this to be `async def`).
+    contents = file.file.read()
+    if len(contents) > MAX_RESUME_BYTES:
+        raise HTTPException(status_code=400, detail="That PDF is too large (5MB max).")
+
+    try:
+        resume_text = extract_text_from_pdf(contents)
+    except ResumePdfUnreadable:
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't read any text from that PDF -- it may be a scanned image without a text layer.",
+        )
+
+    try:
+        return extract_profile_from_resume(resume_text)
+    except ResumeExtractionNotConfigured:
+        raise HTTPException(status_code=503, detail="Resume import isn't configured yet.")
+    except ResumeExtractionFailed:
+        raise HTTPException(status_code=502, detail="Couldn't extract profile info from that resume.")
 
 
 def _bookmarks_public(rows):

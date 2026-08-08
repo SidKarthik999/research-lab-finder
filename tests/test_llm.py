@@ -1,6 +1,6 @@
 import datetime
 
-from backend.llm import build_cold_email_prompt, build_summary_prompt
+from backend.llm import MAX_RESUME_CHARS, build_cold_email_prompt, build_resume_extraction_prompt, build_summary_prompt
 
 
 class TestBuildSummaryPrompt:
@@ -133,3 +133,28 @@ class TestBuildColdEmailPrompt:
         prompt = build_cold_email_prompt("Grace Hopper", None, "Ada Lovelace", "Test University", topics, publications)
         assert "- Computational Biology" in prompt
         assert "- On Computable Numbers" in prompt
+
+
+class TestBuildResumeExtractionPrompt:
+    def test_includes_resume_text(self):
+        prompt = build_resume_extraction_prompt("Jordan Lee\nLincoln High School")
+        assert "Jordan Lee" in prompt
+        assert "Lincoln High School" in prompt
+
+    def test_strips_surrounding_whitespace(self):
+        prompt = build_resume_extraction_prompt("  \n  Some resume text  \n\n  ")
+        assert "Resume text:\n\nSome resume text\n\nExtract" in prompt
+
+    def test_short_resume_is_not_truncated(self):
+        text = "A short resume."
+        prompt = build_resume_extraction_prompt(text)
+        assert text in prompt
+        assert "..." not in prompt
+
+    def test_long_resume_is_truncated(self):
+        text = "x" * (MAX_RESUME_CHARS + 1000)
+        prompt = build_resume_extraction_prompt(text)
+        assert text not in prompt
+        assert "..." in prompt
+        # Truncated content should still be present up to the cutoff.
+        assert "x" * 100 in prompt
