@@ -175,11 +175,79 @@ a {
   color: var(--accent);
 }
 
-.account-nav .user-name {
+.account-dropdown {
+  position: relative;
+}
+
+.account-trigger {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--muted);
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.account-trigger:hover {
+  background: var(--surface-2);
+  transform: none;
+  box-shadow: none;
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 10rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(var(--shadow), 0.04), 0 16px 36px -14px rgba(var(--shadow), 0.45);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  z-index: 20;
+}
+
+/* The [hidden] attribute and this class both have equal (0,1,0)
+   specificity, and an author rule beats the UA stylesheet's own
+   `[hidden] { display: none }` at a tie -- so .account-menu's explicit
+   `display: flex` above silently wins and the menu stays visible even while
+   hidden. This attribute+class selector has higher specificity than either
+   alone, so it wins regardless of source order. Caught by an actual
+   screenshot showing the menu open on page load before any click. */
+.account-menu[hidden] {
+  display: none;
+}
+
+.account-menu a,
+.account-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.account-menu a:hover,
+.account-menu button:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+  transform: none;
+  box-shadow: none;
 }
 
 .avatar {
@@ -875,6 +943,53 @@ button.ghost:hover {
 .publication-list li:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+.bookmark-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.bookmark-item {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.bookmark-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.bookmark-item h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+}
+
+.bookmark-item h3 a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.bookmark-item h3 a:hover {
+  color: var(--accent);
+}
+
+.bookmark-draft-preview {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.bookmark-draft-preview p {
+  margin: 0;
+}
+
+.bookmark-draft-preview .hint {
+  margin-bottom: 0.25rem;
 }
 
 .publication-title {

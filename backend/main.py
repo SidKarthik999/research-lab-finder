@@ -20,6 +20,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from psycopg.errors import ForeignKeyViolation
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import router as auth_router
@@ -31,7 +32,7 @@ from backend.llm import (
     generate_cold_email,
     generate_summary,
 )
-from backend.sessions import current_user
+from backend.sessions import current_user, optional_current_user
 from src import database as db
 from src.database import get_connection
 
@@ -419,7 +420,7 @@ def _fetch_recent_publications_with_abstracts(cursor, professor_id, limit=8):
 
 @app.get("/api/professors/{professor_id}")
 @db.with_connection
-def professor_detail(professor_id: int):
+def professor_detail(professor_id: int, user=Depends(optional_current_user)):
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -453,7 +454,27 @@ def professor_detail(professor_id: int):
     professor = dict(zip(columns, row))
     professor["topics"] = _fetch_professor_topics(cursor, professor_id)
     cursor.close()
+    # False for a signed-out visitor rather than omitted, so the frontend
+    # can always read professor.is_bookmarked without a separate null-check.
+    professor["is_bookmarked"] = db.is_professor_bookmarked(user[0], professor_id) if user else False
     return professor
+
+
+@app.post("/api/professors/{professor_id}/bookmark")
+@db.with_connection
+def bookmark_professor(professor_id: int, user=Depends(current_user)):
+    try:
+        db.insert_bookmark(user[0], professor_id)
+    except ForeignKeyViolation:
+        raise HTTPException(status_code=404, detail="Professor not found")
+    return {"bookmarked": True}
+
+
+@app.delete("/api/professors/{professor_id}/bookmark")
+@db.with_connection
+def unbookmark_professor(professor_id: int, user=Depends(current_user)):
+    db.delete_bookmark(user[0], professor_id)
+    return {"bookmarked": False}
 
 
 @app.post("/api/professors/{professor_id}/summary")
@@ -539,6 +560,17 @@ STUDENT_PROFILE_COLUMNS = [
     "prior_experience",
     "looking_for",
 ]
+
+
+@app.get("/api/professors/{professor_id}/cold-email")
+@db.with_connection
+def professor_cold_email_drafts(professor_id: int, user=Depends(current_user)):
+    # Every generated draft is already saved (see insert_email_draft below)
+    # -- this is just the read side, which nothing called until now, so a
+    # generated draft was effectively invisible again the moment you
+    # navigated away and back. Most recent first.
+    drafts = db.get_email_drafts_for_professor(user[0], professor_id)
+    return {"drafts": [{"id": draft_id, "body": body, "created_at": created_at} for draft_id, body, created_at in drafts]}
 
 
 @app.post("/api/professors/{professor_id}/cold-email")

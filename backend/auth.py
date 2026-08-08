@@ -270,3 +270,38 @@ def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
         looking_for=body.looking_for,
     )
     return _profile_public(db.get_student_profile(user_id))
+
+
+def _bookmarks_public(rows):
+    return [
+        {
+            "bookmark_id": bookmark_id,
+            "bookmarked_at": bookmarked_at,
+            "professor_id": professor_id,
+            "professor_name": professor_name,
+            "institution_name": institution_name,
+            "city": city,
+            "state": state,
+            "country_code": country_code,
+            "latest_draft_body": latest_draft_body,
+            "latest_draft_created_at": latest_draft_created_at,
+        }
+        for (
+            bookmark_id,
+            bookmarked_at,
+            professor_id,
+            professor_name,
+            institution_name,
+            city,
+            state,
+            country_code,
+            latest_draft_body,
+            latest_draft_created_at,
+        ) in rows
+    ]
+
+
+@router.get("/api/me/bookmarks")
+@db.with_connection
+def get_bookmarks(user=Depends(current_user)):
+    return {"bookmarks": _bookmarks_public(db.get_bookmarks_for_user(user[0]))}

@@ -9,7 +9,16 @@
 // failure mode this feature can produce.
 
 import { el, mount } from "../dom.js";
-import { ApiError, generateColdEmail, generateProfessorSummary, getProfessor, getProfessorPublications } from "../api.js";
+import {
+  ApiError,
+  bookmarkProfessor,
+  generateColdEmail,
+  generateProfessorSummary,
+  getColdEmailDrafts,
+  getProfessor,
+  getProfessorPublications,
+  unbookmarkProfessor,
+} from "../api.js";
 import { publicationList, renderContactLine, topicChips, institutionTypeBadge } from "../professor.js";
 import { getCurrentUser } from "../session.js";
 
@@ -21,12 +30,18 @@ export async function renderProfessorDetailView(container, params) {
   const professorId = params.id;
   mount(container, el("p", { class: "empty-state" }, "Loading…"));
 
+  const signedIn = Boolean(getCurrentUser());
+
   let professor;
   let publications;
+  let existingDrafts = [];
   try {
-    [professor, publications] = await Promise.all([
+    [professor, publications, existingDrafts] = await Promise.all([
       getProfessor(professorId),
       getProfessorPublications(professorId).then((data) => data.publications),
+      // Only fetched when signed in -- the endpoint requires auth, and a
+      // signed-out visitor has no drafts to show anyway.
+      signedIn ? getColdEmailDrafts(professorId).then((data) => data.drafts) : Promise.resolve([]),
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
@@ -67,12 +82,42 @@ export async function renderProfessorDetailView(container, params) {
         institutionTypeBadge(professor.carnegie_classification)
       )
     ),
+    signedIn ? renderBookmarkButton(professorId, professor.is_bookmarked) : null,
     topicChips(professor.topics),
     renderContactLine(professor),
     el("div", { class: "card" }, renderSummarySection(professor, professorId)),
-    el("div", { class: "card" }, renderColdEmailSection(professorId)),
+    el("div", { class: "card" }, renderColdEmailSection(professorId, existingDrafts[0]?.body)),
     el("div", { class: "card" }, el("h2", {}, "Publications"), publicationList(publications))
   );
+}
+
+function renderBookmarkButton(professorId, initiallyBookmarked) {
+  let bookmarked = initiallyBookmarked;
+
+  const button = el(
+    "button",
+    { type: "button", class: "secondary bookmark-button" },
+    bookmarked ? "★ Bookmarked" : "☆ Bookmark"
+  );
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      if (bookmarked) {
+        await unbookmarkProfessor(professorId);
+        bookmarked = false;
+      } else {
+        await bookmarkProfessor(professorId);
+        bookmarked = true;
+      }
+      button.textContent = bookmarked ? "★ Bookmarked" : "☆ Bookmark";
+    } catch {
+      // A failed toggle just leaves the button in its previous state --
+      // nothing to report beyond letting the user try again.
+    }
+    button.disabled = false;
+  });
+
+  return button;
 }
 
 function summaryBox(text) {
@@ -119,7 +164,7 @@ function renderSummarySection(professor, professorId) {
   return wrapper;
 }
 
-function renderColdEmailSection(professorId) {
+function renderColdEmailSection(professorId, existingDraftBody) {
   const wrapper = el("div", {}, el("h2", {}, "Draft a cold email"));
 
   const user = getCurrentUser();
@@ -166,7 +211,11 @@ function renderColdEmailSection(professorId) {
     button.disabled = false;
   };
 
-  const button = el("button", { type: "button", class: "secondary", onClick: draftAction }, "Draft an email");
+  const button = el(
+    "button",
+    { type: "button", class: "secondary", onClick: draftAction },
+    existingDraftBody ? "Regenerate draft" : "Draft an email"
+  );
 
   function renderDraft(body) {
     const textarea = el("textarea", { rows: "12" });
@@ -178,6 +227,16 @@ function renderColdEmailSection(professorId) {
       button,
       statusEl
     );
+  }
+
+  // A previously-saved draft (see GET /api/professors/{id}/cold-email) shows
+  // immediately instead of starting from just a "Draft an email" button --
+  // otherwise a generated draft was effectively invisible again the moment
+  // you navigated away and back, since it was only ever written to the DB,
+  // never read back anywhere in the UI until now.
+  if (existingDraftBody) {
+    renderDraft(existingDraftBody);
+    return wrapper;
   }
 
   wrapper.append(button, statusEl);

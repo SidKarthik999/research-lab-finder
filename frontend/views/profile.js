@@ -3,8 +3,69 @@
 // in a later phase; not shown to professors directly.
 
 import { el, mount } from "../dom.js";
-import { getProfile, updateProfile } from "../api.js";
+import { getBookmarks, getProfile, unbookmarkProfessor, updateProfile } from "../api.js";
 import { getCurrentUser } from "../session.js";
+
+const DRAFT_PREVIEW_LENGTH = 160;
+
+function renderBookmarksSection(bookmarks) {
+  const listEl = el("div", { class: "bookmark-list" });
+
+  function renderList() {
+    if (bookmarks.length === 0) {
+      mount(listEl, el("p", { class: "empty-state" }, "You haven't bookmarked any professors yet."));
+      return;
+    }
+    mount(listEl, ...bookmarks.map(renderBookmarkItem));
+  }
+
+  function renderBookmarkItem(bookmark) {
+    const location = [bookmark.city, bookmark.state, bookmark.country_code].filter(Boolean).join(", ");
+    const removeBtn = el("button", { type: "button", class: "ghost" }, "Remove bookmark");
+    removeBtn.addEventListener("click", async () => {
+      removeBtn.disabled = true;
+      try {
+        await unbookmarkProfessor(bookmark.professor_id);
+        bookmarks = bookmarks.filter((b) => b.bookmark_id !== bookmark.bookmark_id);
+        renderList();
+      } catch {
+        removeBtn.disabled = false;
+      }
+    });
+
+    const draftPreview = bookmark.latest_draft_body
+      ? bookmark.latest_draft_body.slice(0, DRAFT_PREVIEW_LENGTH) +
+        (bookmark.latest_draft_body.length > DRAFT_PREVIEW_LENGTH ? "…" : "")
+      : null;
+
+    return el(
+      "div",
+      { class: "bookmark-item" },
+      el(
+        "h3",
+        {},
+        el("a", { href: `#/professor/${bookmark.professor_id}` }, bookmark.professor_name || "Unknown professor")
+      ),
+      el(
+        "p",
+        { class: "meta" },
+        [bookmark.institution_name, location].filter(Boolean).join(" — ") || "Institution unknown"
+      ),
+      draftPreview
+        ? el(
+            "div",
+            { class: "bookmark-draft-preview" },
+            el("p", { class: "hint" }, "Saved email draft:"),
+            el("p", {}, draftPreview)
+          )
+        : null,
+      removeBtn
+    );
+  }
+
+  renderList();
+  return el("div", { class: "card" }, el("h2", {}, "Bookmarked professors"), listEl);
+}
 
 function formField(labelText, inputEl, hint) {
   const children = [el("label", { for: inputEl.id }, labelText), inputEl];
@@ -27,8 +88,9 @@ export async function renderProfileView(container) {
   mount(container, el("p", { class: "empty-state" }, "Loading…"));
 
   let profile;
+  let bookmarks;
   try {
-    profile = await getProfile();
+    [profile, bookmarks] = await Promise.all([getProfile(), getBookmarks().then((data) => data.bookmarks)]);
   } catch (err) {
     mount(container, el("p", { class: "form-error" }, `Couldn't load your profile: ${err.message}`));
     return;
@@ -129,6 +191,8 @@ export async function renderProfileView(container) {
   mount(
     container,
     el("h1", {}, "Your profile"),
+    renderBookmarksSection(bookmarks),
+    el("h2", {}, "Your info"),
     el(
       "p",
       { class: "hint" },

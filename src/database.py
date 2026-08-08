@@ -786,6 +786,72 @@ def get_email_drafts_for_professor(user_id, professor_id):
     cursor.close()
     return drafts
 
+def insert_bookmark(user_id, professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO Bookmark (user_id, professor_id)
+    VALUES (%s, %s)
+    ON CONFLICT (user_id, professor_id) DO NOTHING
+    RETURNING id;
+    '''
+    cursor.execute(query, (user_id, professor_id))
+    row = cursor.fetchone()
+    connection.commit()
+    cursor.close()
+    return row[0] if row else None
+
+def delete_bookmark(user_id, professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM Bookmark WHERE user_id = %s AND professor_id = %s;', (user_id, professor_id))
+    connection.commit()
+    cursor.close()
+
+def is_professor_bookmarked(user_id, professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT 1 FROM Bookmark WHERE user_id = %s AND professor_id = %s;', (user_id, professor_id))
+    bookmarked = cursor.fetchone() is not None
+    cursor.close()
+    return bookmarked
+
+def get_bookmarks_for_user(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    # latest_draft is scoped to this same user_id via the LATERAL join's own
+    # WHERE clause (not just professor_id) -- two different students who
+    # bookmarked the same professor must each see only their own draft.
+    query = '''
+    SELECT
+        Bookmark.id,
+        Bookmark.created_at,
+        Professor.id,
+        Professor.name,
+        Institution.name,
+        Institution.city,
+        Institution.state,
+        Institution.country_code,
+        latest_draft.body,
+        latest_draft.created_at
+    FROM Bookmark
+    JOIN Professor ON Professor.id = Bookmark.professor_id
+    LEFT JOIN Institution ON Institution.id = Professor.institution_id
+    LEFT JOIN LATERAL (
+        SELECT body, created_at
+        FROM EmailDraft
+        WHERE EmailDraft.professor_id = Professor.id AND EmailDraft.user_id = Bookmark.user_id
+        ORDER BY created_at DESC
+        LIMIT 1
+    ) latest_draft ON TRUE
+    WHERE Bookmark.user_id = %s
+    ORDER BY Bookmark.created_at DESC;
+    '''
+    cursor.execute(query, (user_id,))
+    bookmarks = cursor.fetchall()
+    cursor.close()
+    return bookmarks
+
 def get_professor_ai_summary(professor_id):
     connection = get_connection()
     cursor = connection.cursor()

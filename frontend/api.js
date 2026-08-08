@@ -87,6 +87,18 @@ export function generateColdEmail(id) {
   return request(`/api/professors/${id}/cold-email`, { method: "POST" });
 }
 
+export function getColdEmailDrafts(id) {
+  return request(`/api/professors/${id}/cold-email`);
+}
+
+export function bookmarkProfessor(id) {
+  return request(`/api/professors/${id}/bookmark`, { method: "POST" });
+}
+
+export function unbookmarkProfessor(id) {
+  return request(`/api/professors/${id}/bookmark`, { method: "DELETE" });
+}
+
 // --- auth ---
 
 export function getGoogleClientId() {
@@ -138,4 +150,8 @@ export function getProfile() {
 
 export function updateProfile(data) {
   return request("/api/me/profile", { method: "PUT", body: data });
+}
+
+export function getBookmarks() {
+  return request("/api/me/bookmarks");
 }

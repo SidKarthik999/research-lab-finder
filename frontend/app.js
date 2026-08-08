@@ -28,23 +28,30 @@ function initials(user) {
   return letters.toUpperCase();
 }
 
+// Closes any open account dropdown on a click outside it -- registered once
+// at module load (not inside renderAccountNav, which reruns on every
+// session change) so repeated sign-in/out cycles don't stack up duplicate
+// document-level listeners.
+document.addEventListener("click", (event) => {
+  const menu = accountNavEl.querySelector(".account-menu");
+  if (!menu || menu.hidden) return;
+  if (!accountNavEl.contains(event.target)) {
+    menu.hidden = true;
+    accountNavEl.querySelector(".account-trigger")?.setAttribute("aria-expanded", "false");
+  }
+});
+
 function renderAccountNav() {
   const user = getCurrentUser();
   if (user) {
-    mount(
-      accountNavEl,
-      el(
-        "span",
-        { class: "user-name" },
-        el("span", { class: "avatar" }, initials(user)),
-        user.name || user.email
-      ),
+    const menu = el(
+      "div",
+      { class: "account-menu", hidden: true },
       el("a", { href: "#/profile" }, "Profile"),
       el(
         "button",
         {
           type: "button",
-          class: "ghost",
           onClick: async () => {
             await logOut();
             setCurrentUser(null);
@@ -54,6 +61,29 @@ function renderAccountNav() {
         "Sign out"
       )
     );
+    // Closes the menu on any click inside it too (a link nav or the sign-out
+    // button), not just the outside-click handler above -- otherwise it's
+    // left open in the DOM after navigating away, since nothing else
+    // re-renders account-nav on a route change (only on session change).
+    menu.addEventListener("click", () => {
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    });
+
+    const trigger = el(
+      "button",
+      { type: "button", class: "account-trigger", "aria-expanded": "false" },
+      el("span", { class: "avatar" }, initials(user)),
+      user.name || user.email
+    );
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      trigger.setAttribute("aria-expanded", String(opening));
+    });
+
+    mount(accountNavEl, el("div", { class: "account-dropdown" }, trigger, menu));
   } else {
     mount(accountNavEl, el("a", { href: "#/signin" }, "Sign in"), el("a", { href: "#/signup" }, "Sign up"));
   }
