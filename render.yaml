@@ -45,11 +45,19 @@ services:
       # 6.3 keeps that running on your machine against DATABASE_URL, not on
       # Render), so they're intentionally not listed here.
       #
-      # EMAIL_BACKEND defaults to "console" (see backend/email.py), which
-      # means verification/reset emails print to Render's logs instead of
-      # actually being delivered -- fine for smoke-testing the deploy, NOT
-      # fine once real students are signing up. Pick a transactional email
-      # provider (Phase 6.2) and set this to its backend name plus whatever
-      # API key env var it needs before opening signups to real users.
+      # Resend (chosen 2026-08-08 -- see backend/email.py and
+      # docs/ROADMAP.md Phase 6.2): permanent 3,000 emails/month free tier,
+      # plain REST API.
       - key: EMAIL_BACKEND
-        value: console
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      # Optional -- backend/email.py defaults to Resend's own shared
+      # sending domain if unset, which works with zero setup but is meant
+      # for testing. Verify research-finder.com in the Resend dashboard
+      # (adds SPF/DKIM DNS records, same idea as the Render custom-domain
+      # setup) and set this to an address on it before relying on this for
+      # real users, e.g.:
+      #   Research Finder <noreply@research-finder.com>
+      - key: EMAIL_FROM
+        sync: false

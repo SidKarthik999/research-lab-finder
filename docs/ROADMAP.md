@@ -503,19 +503,28 @@ the Blueprint is deployed and live.
 
 **Still open, and each needs a real decision/account, not just code:**
 
-- **A real domain, pointed at Render, with TLS.** Currently only reachable
-  at the `research-lab-finder.onrender.com` Render subdomain. Not optional
-  before real users: Google OAuth requires registered authorized origins and
-  redirect URIs (Google Sign-In is currently broken in production — the
-  `GOOGLE_CLIENT_ID`/`SECRET` env vars are set, but that client's authorized
-  origins/redirect URIs don't yet include either the Render subdomain or a
-  real domain), and `Secure` session cookies require HTTPS.
-- **Pick a transactional email provider.** `EMAIL_BACKEND` only has a
-  `"console"` implementation right now (`backend/email.py`) — anything else
-  raises `NotImplementedError`. Fine for smoke-testing the deploy (which is
-  where things stand today); signup/verification/reset emails currently just
-  print into Render's logs, invisible to a real signee, until this is picked
-  and implemented.
+✅ **Domain live (2026-08-08).** `research-finder.com` (bought via Namecheap,
+renamed from the original "Research Lab Finder" branding the same day — see
+below) and `www.research-finder.com` both point at Render with verified TLS.
+Google OAuth's Authorized JavaScript origins updated to include both, fixing
+Google Sign-In in production.
+
+✅ **Email provider picked and wired up (2026-08-08): Resend.** Chosen over
+Postmark (100 emails/month free tier, too tight even at low signup volume)
+and SendGrid (dropped its permanent free tier in 2025 — trial only now) for
+Resend's 3,000-emails/month free tier, which is permanent rather than
+time-limited. `backend/email.py` gained an `EMAIL_BACKEND=resend` branch —
+`build_resend_payload()` is a pure function (tested in `tests/test_email.py`
+without a network call, same pattern as `build_search_query()`), the actual
+`requests.post()` to Resend's API is the thin impure wrapper around it.
+`render.yaml` sets `EMAIL_BACKEND=resend` with `RESEND_API_KEY` prompted as
+a secret. `EMAIL_FROM` defaults to Resend's own shared sending domain
+(works immediately, fine for testing) — **still open:** verify
+`research-finder.com` in the Resend dashboard (adds its own SPF/DKIM DNS
+records, same idea as the domain-to-Render setup above) and set `EMAIL_FROM`
+to a real address on it, e.g. `noreply@research-finder.com`, before this is
+trusted for real signups.
+
 - **Automated backups going forward**, either Neon's point-in-time recovery
   (check what the Launch plan actually includes) or a scheduled `pg_dump`.
 
