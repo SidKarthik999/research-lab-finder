@@ -1258,14 +1258,52 @@ button.publication-title:hover {
   align-items: flex-end;
   gap: 2px;
   height: 3rem;
+  /* So a tooltip on the first/last bar (positioned relative to that bar,
+     centered) doesn't get clipped at the row's own edge. */
+  margin: 0 var(--space-4);
 }
 
 .sparkline-bar {
+  position: relative;
   flex: 1 1 auto;
-  min-width: 2px;
+  min-width: 4px;
   border-radius: 2px 2px 0 0;
   background: linear-gradient(180deg, var(--accent), var(--accent-2));
   opacity: 0.85;
+  cursor: default;
+}
+
+.sparkline-bar:hover {
+  opacity: 1;
+}
+
+/* Custom tooltip instead of relying on the title="" attribute alone --
+   browsers delay the native tooltip by ~1s and render it in tiny system
+   font, easy to miss on a bar this thin. Kept in sync with title (see
+   sparkline() in admin.js) so screen readers/no-CSS fallback still work. */
+.sparkline-bar::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.1s ease;
+  z-index: 10;
+}
+
+.sparkline-bar:hover::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 .admin-table-wrap {

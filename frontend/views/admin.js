@@ -34,7 +34,12 @@ function sparkline(daily) {
       el("div", {
         class: "sparkline-bar",
         style: `height: ${Math.max(4, (d.count / max) * 100)}%`,
+        // "title" is the accessible/fallback tooltip (screen readers, and
+        // browsers where the CSS ::after tooltip below doesn't fire); the
+        // data-tooltip attribute drives that CSS tooltip, which shows
+        // instantly on hover instead of the browser's ~1s native delay.
         title: `${d.date}: ${d.count}`,
+        "data-tooltip": `${d.date}: ${d.count}`,
       })
     )
   );

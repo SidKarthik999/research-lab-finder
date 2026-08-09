@@ -623,7 +623,7 @@ def admin_metrics(admin=Depends(require_admin)):
 
 @app.post("/api/professors/{professor_id}/summary")
 @db.with_connection
-def professor_summary(professor_id: int):
+def professor_summary(professor_id: int, user=Depends(optional_current_user)):
     # get_professor_ai_summary returns None only when the professor row
     # itself doesn't exist -- a professor with no summary yet still comes
     # back as (None, None), which is what triggers generation below.
@@ -665,6 +665,12 @@ def professor_summary(professor_id: int):
         raise HTTPException(status_code=502, detail="Couldn't generate a summary for this professor.")
 
     db.update_professor_ai_summary(professor_id, summary_text)
+    # Only logged on an actual fresh generation (an OpenAI call really
+    # happened), not the cached-hit return above -- same "log the real
+    # event, not the request" semantics as cold-email's LlmUsage row.
+    # user_id is nullable here (see migration 009) since summaries aren't
+    # gated behind sign-in, unlike cold email/resume import.
+    db.insert_llm_usage(user[0] if user else None, "ai_summary")
     updated_summary, updated_generated_at = db.get_professor_ai_summary(professor_id)
     return {"summary": updated_summary, "generated_at": updated_generated_at, "cached": False}
 
