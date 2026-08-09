@@ -10,7 +10,7 @@ import {
   listInstitutions,
   listTopics,
   listFields,
-  listInstitutionClassifications,
+  listInstitutionTypes,
   getProfessorPublications,
 } from "../api.js";
 import { renderContactLine, topicChips, publicationList, institutionTypeBadge } from "../professor.js";
@@ -21,9 +21,9 @@ export function renderSearchView(container) {
   let currentPage = 1;
 
   const fieldSelect = el("select", { id: "field", name: "field" }, el("option", { value: "" }, "Any field"));
-  const carnegieSelect = el(
+  const institutionTypeSelect = el(
     "select",
-    { id: "carnegie_classification", name: "carnegie_classification" },
+    { id: "institution_type", name: "institution_type" },
     el("option", { value: "" }, "Any institution type")
   );
   const topicInput = el("input", {
@@ -110,8 +110,8 @@ export function renderSearchView(container) {
       el(
         "div",
         { class: "field" },
-        el("label", { for: "carnegie_classification" }, "Institution type"),
-        carnegieSelect
+        el("label", { for: "institution_type" }, "Institution type"),
+        institutionTypeSelect
       ),
       el(
         "div",
@@ -223,9 +223,9 @@ export function renderSearchView(container) {
 
   (async () => {
     try {
-      const data = await listInstitutionClassifications();
-      for (const classification of data.classifications) {
-        carnegieSelect.append(el("option", { value: classification }, classification));
+      const data = await listInstitutionTypes();
+      for (const type of data.types) {
+        institutionTypeSelect.append(el("option", { value: type }, type));
       }
     } catch {
       // Same as the field dropdown -- leave it as "Any institution type" on failure.
@@ -290,7 +290,7 @@ export function renderSearchView(container) {
       el("h2", {}, el("a", { href: `#/professor/${professor.id}` }, professor.professor_name || "Unknown professor")),
       el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
       location ? el("p", { class: "meta" }, location) : null,
-      institutionTypeBadge(professor.carnegie_classification),
+      institutionTypeBadge(professor.institution_type),
       topicChips(professor.topics),
       renderContactLine(professor),
       toggleBtn,

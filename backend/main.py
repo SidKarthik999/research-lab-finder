@@ -25,6 +25,11 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import router as auth_router
+from backend.institution_types import (
+    INSTITUTION_TYPES,
+    institution_type_for_classification,
+    raw_classifications_for_type,
+)
 from backend.llm import (
     ColdEmailGenerationNotConfigured,
     ColdEmailGenerationRefused,
@@ -78,7 +83,7 @@ def build_search_query(
     topic=None,
     field=None,
     recent_only=False,
-    carnegie_classification=None,
+    institution_type=None,
     page=1,
     limit=20,
 ):
@@ -162,15 +167,17 @@ def build_search_query(
             )"""
         )
         params.append(f"%{field}%")
-    if carnegie_classification:
-        # Exact match, not ILIKE -- the values come from the
-        # /api/institution-classifications dropdown (see list_institution_classifications
-        # below), and several real labels are substrings of each other (e.g.
-        # "Doctoral Universities: High Research Activity" is a substring of
-        # "...Very High Research Activity"), so a partial match would
-        # silently conflate genuinely different tiers.
-        conditions.append("Institution.carnegie_classification = %s")
-        params.append(carnegie_classification)
+    if institution_type:
+        # The dropdown offers one of the four general buckets in
+        # backend/institution_types.py (e.g. "Research Universities"), not a
+        # raw Carnegie label -- the ~33-value taxonomy underneath is too
+        # granular for a search filter. raw_classifications_for_type()
+        # expands that bucket back into the specific labels actually stored
+        # on Institution.carnegie_classification for the IN match. An
+        # unrecognized bucket name expands to [], which correctly matches
+        # nothing rather than raising.
+        conditions.append("Institution.carnegie_classification = ANY(%s)")
+        params.append(raw_classifications_for_type(institution_type))
     if recent_only:
         # A fixed interval, not a %s placeholder -- RECENT_YEARS_CUTOFF is a
         # server-side constant, never user input, so there's nothing here
@@ -286,8 +293,8 @@ def search_professors(
     recent_only: bool = Query(
         False, description="Only professors with a publication in the last few years"
     ),
-    carnegie_classification: str | None = Query(
-        None, description="Filter by the institution's Carnegie Classification, e.g. 'Doctoral Universities: Very High Research Activity'"
+    institution_type: str | None = Query(
+        None, description=f"Filter by general institution type, one of: {', '.join(INSTITUTION_TYPES)}"
     ),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -302,7 +309,7 @@ def search_professors(
         topic=topic,
         field=field,
         recent_only=recent_only,
-        carnegie_classification=carnegie_classification,
+        institution_type=institution_type,
         page=page,
         limit=limit,
     )
@@ -313,6 +320,12 @@ def search_professors(
     columns = [desc.name for desc in cursor.description]
     rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
     cursor.close()
+    # Institution.carnegie_classification stays in the row for now (harmless
+    # extra field) but the frontend badge reads institution_type, the same
+    # bucketed value the filter above matches against -- see
+    # backend/institution_types.py.
+    for row in rows:
+        row["institution_type"] = institution_type_for_classification(row["carnegie_classification"])
     return {"results": rows, "page": page, "limit": limit}
 
 
@@ -331,25 +344,16 @@ def list_fields():
     return {"fields": fields}
 
 
-@app.get("/api/institution-classifications")
-@db.with_connection
-def list_institution_classifications():
-    # Same shape as /api/fields: a small, fixed set of values (Carnegie's
-    # own Basic Classification taxonomy, ~33 possible labels, a subset of
-    # which actually appear in our data) -- a dropdown, not an
-    # autocomplete-as-you-type box. Only ~78% of institutions have been
-    # matched (see src/ingestion/carnegie.py); this only returns values that
-    # actually appear, so the dropdown never offers an option that would
-    # return zero results.
-    connection = get_connection()
-    cursor = connection.cursor()
-    cursor.execute(
-        "SELECT DISTINCT carnegie_classification FROM Institution "
-        "WHERE carnegie_classification IS NOT NULL ORDER BY carnegie_classification;"
-    )
-    classifications = [row[0] for row in cursor.fetchall()]
-    cursor.close()
-    return {"classifications": classifications}
+@app.get("/api/institution-types")
+def list_institution_types():
+    # Same shape as /api/fields: a small, fixed set of values, dropdown not
+    # autocomplete. Unlike /api/fields this doesn't need a DB query -- the
+    # four buckets in backend/institution_types.py are a fixed presentation
+    # mapping over Carnegie's ~33-label taxonomy (see src/ingestion/
+    # carnegie.py), not something derived from what's currently in the
+    # table, so the list is always complete even before ingestion/matching
+    # has reached every institution.
+    return {"types": INSTITUTION_TYPES}
 
 
 @app.get("/api/topics")
@@ -454,6 +458,7 @@ def professor_detail(professor_id: int, user=Depends(optional_current_user)):
     columns = [desc.name for desc in cursor.description]
     professor = dict(zip(columns, row))
     professor["topics"] = _fetch_professor_topics(cursor, professor_id)
+    professor["institution_type"] = institution_type_for_classification(professor["carnegie_classification"])
     cursor.close()
     # False for a signed-out visitor rather than omitted, so the frontend
     # can always read professor.is_bookmarked without a separate null-check.

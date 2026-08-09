@@ -79,8 +79,8 @@ export function listFields() {
   return request("/api/fields");
 }
 
-export function listInstitutionClassifications() {
-  return request("/api/institution-classifications");
+export function listInstitutionTypes() {
+  return request("/api/institution-types");
 }
 
 // --- professors ---

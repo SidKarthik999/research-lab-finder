@@ -80,7 +80,7 @@ export async function renderProfessorDetailView(container, params) {
         el("h1", {}, name),
         el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
         location ? el("p", { class: "meta" }, location) : null,
-        institutionTypeBadge(professor.carnegie_classification)
+        institutionTypeBadge(professor.institution_type)
       )
     ),
     signedIn ? renderBookmarkButton(professorId, professor.is_bookmarked) : null,

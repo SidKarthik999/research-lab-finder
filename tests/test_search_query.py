@@ -14,7 +14,7 @@ FILTER_KWARGS = {
     "topic": "Neuroscience",
     "field": "Biology",
     "recent_only": True,
-    "carnegie_classification": "Doctoral Universities: Very High Research Activity",
+    "institution_type": "Research Universities",
 }
 
 
@@ -103,15 +103,24 @@ def test_recent_only_combined_with_another_filter_still_matches_placeholder_coun
     assert placeholder_count(sql) == len(params)
 
 
-def test_carnegie_classification_uses_exact_match_not_ilike():
-    # Several real Carnegie labels are substrings of each other (e.g. "...
-    # High Research Activity" is a substring of "...Very High Research
-    # Activity") -- ILIKE would silently conflate different tiers, so this
-    # must be an exact match.
-    sql, params = build_search_query(
-        carnegie_classification="Doctoral Universities: High Research Activity", limit=5
-    )
-    assert "Institution.carnegie_classification = %s" in sql
+def test_institution_type_matches_against_raw_classification_list_not_ilike():
+    # institution_type is one of the four general buckets in
+    # backend/institution_types.py, expanded back into the raw Carnegie
+    # labels that fall under it for an ANY() match -- exact values, not
+    # ILIKE, since several real Carnegie labels are substrings of each other
+    # (e.g. "...High Research Activity" is a substring of "...Very High
+    # Research Activity") and ILIKE would silently conflate different tiers.
+    sql, params = build_search_query(institution_type="Research Universities", limit=5)
+    assert "Institution.carnegie_classification = ANY(%s)" in sql
     assert "Institution.carnegie_classification ILIKE" not in sql
-    assert "Doctoral Universities: High Research Activity" in params
-    assert "%Doctoral Universities: High Research Activity%" not in params
+    (raw_list,) = [p for p in params if isinstance(p, list)]
+    assert "Doctoral Universities: Very High Research Activity" in raw_list
+    assert "Doctoral Universities: High Research Activity" in raw_list
+    assert "Master's Colleges & Universities: Larger Programs" not in raw_list
+
+
+def test_unrecognized_institution_type_matches_nothing_not_everything():
+    sql, params = build_search_query(institution_type="Not A Real Bucket", limit=5)
+    assert "Institution.carnegie_classification = ANY(%s)" in sql
+    (raw_list,) = [p for p in params if isinstance(p, list)]
+    assert raw_list == []
