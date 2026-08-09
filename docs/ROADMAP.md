@@ -87,10 +87,13 @@ correctness.
    other people can reach it.
 6. **No opportunity signal.** Nothing records whether a PI or program actually
    takes students, which is the fact a student most needs. (Phase 5B.)
-7. **Nobody outside this machine can use it.** The app only runs on
-   `localhost` — this is what Phase 6 closes, and per the user's direction on
-   2026-08-08, it now comes before Phase 4/5B/5C: get the existing product in
-   front of real students before adding more data or polish.
+7. ~~**Nobody outside this machine can use it.**~~ **Fixed in Phase 6.1–6.4**
+   (2026-08-08/09). Live at `https://research-finder.com` on Render + Neon,
+   with working Google/password sign-in, real email delivery, and every LLM
+   endpoint guarded against runaway cost/abuse. What's left before this is
+   genuinely ready for strangers to use is Phase 6.5 (privacy policy, data
+   provenance, a correction/removal contact path) — see the top of this
+   file.
 
 ---
 
