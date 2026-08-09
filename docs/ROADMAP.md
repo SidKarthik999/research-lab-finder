@@ -443,7 +443,32 @@ come from a real platform secret store in production** (`OPENAI_API_KEY`,
 at startup if any are missing — `.env` stays for local dev only. This is
 config for whichever host gets picked in 6.2, not a code change.
 
-### 6.2 — Hosting shape
+### 6.2 — Hosting shape ✅ **live (2026-08-08)**
+
+The app is deployed and reachable at `https://research-lab-finder.onrender.com`
+— `/healthz` returns `{"status": "ok"}`, confirming it's actually querying
+Neon, not just that the container booted.
+
+**Two real problems hit and fixed on the way here**, worth remembering for
+next time this pattern comes up:
+
+- **Neon's free tier hard-caps a project at 512 MB.** The local database was
+  554 MB (`publication` alone is 463 MB), so the first restore attempt
+  failed partway through with `project size limit exceeded`, silently
+  leaving some tables incomplete. Fixed by upgrading to Neon's usage-based
+  Launch plan before restoring — ~$0.19/month in storage at this size, no
+  fixed cap. Anyone repeating this migration should check `SELECT
+  pg_size_pretty(pg_database_size(...))` against the target tier's limit
+  *before* restoring, not after hitting the error mid-load.
+- **`requirements.txt`, hand-ported from `environment.yml`'s pip section,
+  missed `requests`.** It's a conda-level dependency there (not under
+  `pip:`), but `backend/google_auth.py` imports
+  `google.auth.transport.requests`, which needs it directly — conda always
+  had it installed locally, masking the gap until Render's container
+  crashed at import time. Caught for good by installing `requirements.txt`
+  into a clean virtualenv (not the conda env) and importing `backend.main`
+  directly — the same check should be re-run if `requirements.txt` drifts
+  from `environment.yml` again.
 
 **Decided 2026-08-08: Render (web service) + Neon (Postgres).** Not Render's
 own free Postgres — it expires 30 days after creation and gets deleted after
@@ -472,22 +497,27 @@ cheap. `healthCheckPath: /healthz` wires up the endpoint Phase 6.1 added.
 Neon). `.env.example` documents every env var the app reads
 and which ones are still required in production.
 
+✅ Render/Neon accounts created, data restored (all ~196k professors, all
+1,768 institutions confirmed present after the size-limit fix above), and
+the Blueprint is deployed and live.
+
 **Still open, and each needs a real decision/account, not just code:**
 
-- **Create the actual Render and Neon accounts/projects and get a domain
-  pointed at Render.** Nothing above deploys itself — `render.yaml` is a
-  Blueprint Render reads once you connect the repo. A real domain with TLS
-  is not optional: Google OAuth requires registered authorized origins and
-  redirect URIs, and `Secure` cookies require HTTPS.
+- **A real domain, pointed at Render, with TLS.** Currently only reachable
+  at the `research-lab-finder.onrender.com` Render subdomain. Not optional
+  before real users: Google OAuth requires registered authorized origins and
+  redirect URIs (Google Sign-In is currently broken in production — the
+  `GOOGLE_CLIENT_ID`/`SECRET` env vars are set, but that client's authorized
+  origins/redirect URIs don't yet include either the Render subdomain or a
+  real domain), and `Secure` session cookies require HTTPS.
 - **Pick a transactional email provider.** `EMAIL_BACKEND` only has a
   `"console"` implementation right now (`backend/email.py`) — anything else
-  raises `NotImplementedError`. Fine for smoke-testing the deploy; signup/
-  verification/reset emails silently go nowhere a real user can see until
-  this is picked and implemented.
-- **Move the data.** `make restore-to-neon NEON_URL=...` once the Neon
-  project exists. Run `make backup` first regardless.
+  raises `NotImplementedError`. Fine for smoke-testing the deploy (which is
+  where things stand today); signup/verification/reset emails currently just
+  print into Render's logs, invisible to a real signee, until this is picked
+  and implemented.
 - **Automated backups going forward**, either Neon's point-in-time recovery
-  (check what the free tier actually includes) or a scheduled `pg_dump`.
+  (check what the Launch plan actually includes) or a scheduled `pg_dump`.
 
 ### 6.3 — Where the ingestion pipeline runs
 
