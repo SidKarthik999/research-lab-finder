@@ -562,9 +562,21 @@ resume-PDF import (`POST /api/me/resume`), not just summaries and cold
 emails — it wasn't in the original plan below but calls the model on every
 upload, uncached, same as email drafting.
 
-- **Per-user daily cap on cold-email generation and resume import**, enforced
-  server-side. Summaries are naturally bounded because they cache after
-  first view; email drafting and resume import are not.
+- ✅ **Per-user daily cap on cold-email generation and resume import
+  (2026-08-08).** Summaries are naturally bounded because they cache after
+  first view; these two are not, so nothing else was stopping one user or
+  script from generating in a loop. Backed by a new `LlmUsage` table
+  (migration `007_llm_usage.sql`: `user_id`, `kind`, `created_at`) rather
+  than an in-process counter like `backend/rate_limit.py`'s auth limiting —
+  this is a real spend guard, not just an abuse nuisance guard, so it needs
+  to survive a Render free-tier cold start mid-day rather than silently
+  resetting. Cold email: 20/day (`COLD_EMAIL_DAILY_LIMIT` in
+  `backend/main.py`). Resume import: 5/day (`RESUME_IMPORT_DAILY_LIMIT` in
+  `backend/auth.py`) — tighter, since a legitimate student realistically
+  imports their resume once, maybe retries a couple of times, not
+  routinely. A usage row is recorded on a real (billed) API call whether it
+  succeeds or the model refuses — only the "not configured" case (caught
+  before any API call) doesn't count.
 - **A monthly spend alert** on the OpenAI account, so a runaway loop is
   discovered by a notification rather than an invoice.
 - ✅ **Rate limits on auth endpoints (2026-08-08).** `login`, `signup`, and

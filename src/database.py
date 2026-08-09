@@ -910,3 +910,29 @@ def update_professor_ai_summary(professor_id, summary):
     cursor.execute(query, (summary, professor_id))
     connection.commit()
     cursor.close()
+
+def count_llm_usage_today(user_id, kind):
+    # CURRENT_DATE is UTC-midnight-bounded (Postgres server timezone,
+    # unconfigured here) -- a coarse day boundary is fine for a spend
+    # guard, doesn't need to track each student's own timezone.
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT COUNT(*)
+    FROM LlmUsage
+    WHERE user_id = %s AND kind = %s AND created_at >= CURRENT_DATE;
+    '''
+    cursor.execute(query, (user_id, kind))
+    count = cursor.fetchone()[0]
+    cursor.close()
+    return count
+
+def insert_llm_usage(user_id, kind):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO LlmUsage (user_id, kind) VALUES (%s, %s);
+    '''
+    cursor.execute(query, (user_id, kind))
+    connection.commit()
+    cursor.close()

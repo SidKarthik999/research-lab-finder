@@ -343,6 +343,12 @@ def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
 
 MAX_RESUME_BYTES = 5 * 1024 * 1024  # 5MB -- plenty for a text-based resume PDF
 
+# Per-user daily cap (Phase 6.4) -- same reasoning as COLD_EMAIL_DAILY_LIMIT
+# in backend/main.py: uncached, so nothing else bounds repeated calls.
+# Tighter than the email limit since a legitimate student realistically
+# imports their resume once, maybe retries a couple times, not routinely.
+RESUME_IMPORT_DAILY_LIMIT = 5
+
 
 @router.post("/api/me/resume")
 @db.with_connection
@@ -352,6 +358,12 @@ def import_resume(file: UploadFile = File(...), user=Depends(current_user)):
     # whatever came back non-null and the student still reviews and clicks
     # Save, same as every other AI-generated content in this app: the app
     # drafts, the student decides what actually gets saved.
+    user_id = user[0]
+    if db.count_llm_usage_today(user_id, "resume_import") >= RESUME_IMPORT_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've reached today's limit of {RESUME_IMPORT_DAILY_LIMIT} resume imports. Try again tomorrow.",
+        )
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Please upload a PDF file.")
 
@@ -373,11 +385,19 @@ def import_resume(file: UploadFile = File(...), user=Depends(current_user)):
         )
 
     try:
-        return extract_profile_from_resume(resume_text)
+        result = extract_profile_from_resume(resume_text)
     except ResumeExtractionNotConfigured:
+        # No API call was made (the key check happens before the request),
+        # so this doesn't count against the daily cap.
         raise HTTPException(status_code=503, detail="Resume import isn't configured yet.")
     except ResumeExtractionFailed:
+        # A real (billed) API call happened even though extraction failed
+        # -- still counts.
+        db.insert_llm_usage(user_id, "resume_import")
         raise HTTPException(status_code=502, detail="Couldn't extract profile info from that resume.")
+
+    db.insert_llm_usage(user_id, "resume_import")
+    return result
 
 
 def _bookmarks_public(rows):

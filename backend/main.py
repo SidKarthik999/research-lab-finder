@@ -73,6 +73,14 @@ app.include_router(auth_router)
 
 RECENT_YEARS_CUTOFF = 3
 
+# Per-user daily cap on cold-email generation (Phase 6.4) -- unlike AI
+# summaries, which cache after first view, every cold-email request is a
+# fresh, uncached OpenAI call, so this is what actually bounds the cost of
+# one user or script generating drafts in a loop. Backed by LlmUsage
+# (database, not an in-process counter) so it survives a Render free-tier
+# cold start mid-day rather than silently resetting.
+COLD_EMAIL_DAILY_LIMIT = 20
+
 def build_search_query(
     name=None,
     text=None,
@@ -603,6 +611,11 @@ def professor_cold_email(professor_id: int, user=Depends(current_user)):
     # user is the raw (id, email, email_verified, name, avatar_url) tuple
     # current_user returns -- same indexing convention as backend/auth.py.
     user_id, _email, _email_verified, user_name, _avatar_url = user
+    if db.count_llm_usage_today(user_id, "cold_email") >= COLD_EMAIL_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've reached today's limit of {COLD_EMAIL_DAILY_LIMIT} email drafts. Try again tomorrow.",
+        )
     profile_row = db.get_student_profile(user_id)
     if profile_row is None:
         # A draft with nothing to say about the student is worse than no
@@ -646,10 +659,16 @@ def professor_cold_email(professor_id: int, user=Depends(current_user)):
             user_name, profile, professor_name, institution_name, topics, publications
         )
     except ColdEmailGenerationNotConfigured:
+        # No API call was made (the key check happens before the request),
+        # so this doesn't count against the daily cap.
         raise HTTPException(status_code=503, detail="Email drafting is not configured yet.")
     except ColdEmailGenerationRefused:
+        # A real (billed) API call happened even though generation was
+        # refused -- still counts.
+        db.insert_llm_usage(user_id, "cold_email")
         raise HTTPException(status_code=502, detail="Couldn't draft an email for this professor.")
 
+    db.insert_llm_usage(user_id, "cold_email")
     draft_id = db.insert_email_draft(user_id, professor_id, draft_body)
     return {"draft": draft_body, "draft_id": draft_id}
 
