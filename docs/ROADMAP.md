@@ -567,8 +567,20 @@ upload, uncached, same as email drafting.
   first view; email drafting and resume import are not.
 - **A monthly spend alert** on the OpenAI account, so a runaway loop is
   discovered by a notification rather than an invoice.
-- **Rate limits on auth endpoints** (login, signup, password reset) by IP and
-  by email, which the Phase 5A design already calls for.
+- ✅ **Rate limits on auth endpoints (2026-08-08).** `login`, `signup`, and
+  `forgot` are all limited by both email and IP, via a small in-process
+  fixed-window counter (`backend/rate_limit.py`) rather than slowapi/limits
+  (those key off the raw Starlette `Request`, which makes limiting by a POST
+  body field like email awkward) or Redis (this app runs a single Render
+  instance with no horizontal scaling, so there's no state to share across
+  processes — a counter reset on a cold start is a non-issue for an abuse
+  guard). Login uses a tighter, shorter window (8/15min per email, 30/15min
+  per IP) since brute-forcing a password is rapid-fire; signup/forgot use a
+  longer one (3/hour per email, 10/hour per IP) since their abuse shape is
+  spamming a real inbox with unwanted email, not guessing a secret — the
+  exact nuisance found and confirmed live before this was built (see
+  Phase 5A's account-linking notes above). A 429 is returned generically,
+  same anti-enumeration principle as the rest of this file.
 - **Treat email drafting as a spam vector.** It generates persuasive
   messages addressed to real named academics. Requiring an account plus a
   daily cap plus keeping the send action manual (the app drafts, the student

@@ -23,6 +23,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
+from backend.rate_limit import check_rate_limit
 from backend.llm import (
     ResumeExtractionFailed,
     ResumeExtractionNotConfigured,
@@ -55,6 +56,35 @@ GENERIC_CHECK_EMAIL = "If that email can receive mail, check it for a link."
 # Defaults to local dev's own origin so this still works with zero setup
 # before APP_BASE_URL is set in production.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
+
+# Rate limits: (max attempts, window in seconds), enforced by both the
+# submitted email and the caller's IP -- see backend/rate_limit.py. Login's
+# window is shorter than signup/forgot's: a brute-force attempt is
+# rapid-fire, so a tight recent window catches it fast without punishing
+# someone who mistyped their password five minutes ago and is trying
+# again now. Signup/forgot's abuse shape is different (spamming a real
+# inbox with unwanted emails, not guessing a secret), so a longer window
+# is what actually limits the nuisance, not attempt speed.
+LOGIN_EMAIL_LIMIT = (8, 15 * 60)
+LOGIN_IP_LIMIT = (30, 15 * 60)
+SIGNUP_EMAIL_LIMIT = (3, 60 * 60)
+SIGNUP_IP_LIMIT = (10, 60 * 60)
+FORGOT_EMAIL_LIMIT = (3, 60 * 60)
+FORGOT_IP_LIMIT = (10, 60 * 60)
+
+
+def _enforce_rate_limit(request, scope, email, email_limit, ip_limit):
+    # Both checks always run (not short-circuited) -- each records its own
+    # attempt independently, so a caller under the email limit but over
+    # the IP limit (or vice versa) still gets counted correctly for next
+    # time.
+    email_count, email_window = email_limit
+    ip_count, ip_window = ip_limit
+    ip = request.client.host if request.client else "unknown"
+    email_ok = check_rate_limit(f"{scope}:email:{email.lower()}", email_count, email_window)
+    ip_ok = check_rate_limit(f"{scope}:ip:{ip}", ip_count, ip_window)
+    if not email_ok or not ip_ok:
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
 
 
 class GoogleSignInRequest(BaseModel):
@@ -141,7 +171,8 @@ def google_sign_in(body: GoogleSignInRequest, request: Request):
 
 
 @router.post("/api/auth/signup")
-def signup(body: SignupRequest):
+def signup(body: SignupRequest, request: Request):
+    _enforce_rate_limit(request, "signup", body.email, SIGNUP_EMAIL_LIMIT, SIGNUP_IP_LIMIT)
     password_hash = hash_password(body.password)
     token = make_email_verification_token(body.email, password_hash, name=body.name)
     verify_url = f"{APP_BASE_URL}/#/verify-email?token={token}"
@@ -178,6 +209,7 @@ def verify_email(body: VerifyEmailRequest, request: Request):
 @router.post("/api/auth/login")
 @db.with_connection
 def login(body: LoginRequest, request: Request):
+    _enforce_rate_limit(request, "login", body.email, LOGIN_EMAIL_LIMIT, LOGIN_IP_LIMIT)
     identity = db.get_auth_identity("password", body.email)
     if identity is None or identity[4] is None or not verify_password(body.password, identity[4]):
         raise HTTPException(status_code=401, detail=GENERIC_AUTH_ERROR)
@@ -189,7 +221,8 @@ def login(body: LoginRequest, request: Request):
 
 @router.post("/api/auth/forgot")
 @db.with_connection
-def forgot_password(body: ForgotPasswordRequest):
+def forgot_password(body: ForgotPasswordRequest, request: Request):
+    _enforce_rate_limit(request, "forgot", body.email, FORGOT_EMAIL_LIMIT, FORGOT_IP_LIMIT)
     user = db.get_user_by_email(body.email)
     if user is not None:
         token = make_password_reset_token(user[0])
