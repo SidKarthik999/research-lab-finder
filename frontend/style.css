@@ -591,6 +591,18 @@ button.chip-button:hover {
   }
 }
 
+/* Two even columns (First/Last name) -- not .profile-fields-row's 1fr/2fr/1fr,
+   which was sized for its own 3 uneven fields (Level/School/Graduation
+   year) and blows out with only 2 items dropped into it: grid items don't
+   shrink below their content's default min-width unless told to, so a
+   plain `1fr` track can still force the input past its column in a narrow
+   .form. minmax(0, 1fr) is what actually lets the column shrink to fit. */
+.name-fields-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
 .resume-upload-row {
   display: flex;
   align-items: center;

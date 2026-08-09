@@ -143,7 +143,7 @@ export async function renderProfileView(container) {
     { class: "form" },
     el(
       "div",
-      { class: "profile-fields-row" },
+      { class: "name-fields-row" },
       formField("First name", firstNameInput),
       formField("Last name", lastNameInput)
     ),
@@ -228,13 +228,13 @@ export async function renderProfileView(container) {
     container,
     el("h1", {}, "Your profile"),
     accountSection,
-    resumeSection,
     el("h2", {}, "Your info"),
     el(
       "p",
       { class: "hint" },
       "This information is used to personalize the cold emails you generate — it's never shown to professors directly."
     ),
+    resumeSection,
     form
   );
 }
