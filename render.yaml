@@ -1,0 +1,53 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec).
+#
+# Defines the one web service Phase 6.2 calls for -- see docs/ROADMAP.md.
+# Postgres is NOT defined here: per the 2026-08-08 decision, the database is
+# Neon (its free tier persists indefinitely; Render's free Postgres expires
+# and gets deleted after 30 days, which is not acceptable for data that cost
+# real OpenAlex/ORCID API time to collect). Create the Neon project
+# separately and paste its connection string into DATABASE_URL below.
+#
+# To deploy: push this repo to GitHub, then in the Render dashboard use
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file
+# and prompts for every envVar marked sync: false.
+services:
+  - name: research-lab-finder
+    type: web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true
+    # Runs after the image builds, before the new instance starts serving --
+    # migrations land before traffic does, per the additive-migration design
+    # in database/migrate.py.
+    preDeployCommand: python -m database.migrate
+    envVars:
+      - key: ENV
+        value: production
+      # Neon connection string, e.g.
+      # postgresql://user:password@ep-xxx.neon.tech/research_lab_finder?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Generate a fresh one for production -- don't reuse the local .env
+      # value. E.g.: python -c "import secrets; print(secrets.token_hex(32))"
+      - key: SESSION_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # ORCID creds are only needed by the local ingestion pipeline (Phase
+      # 6.3 keeps that running on your machine against DATABASE_URL, not on
+      # Render), so they're intentionally not listed here.
+      #
+      # EMAIL_BACKEND defaults to "console" (see backend/email.py), which
+      # means verification/reset emails print to Render's logs instead of
+      # actually being delivered -- fine for smoke-testing the deploy, NOT
+      # fine once real students are signing up. Pick a transactional email
+      # provider (Phase 6.2) and set this to its backend name plus whatever
+      # API key env var it needs before opening signups to real users.
+      - key: EMAIL_BACKEND
+        value: console

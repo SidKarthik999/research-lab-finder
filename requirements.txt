@@ -1,0 +1,25 @@
+# Runtime dependencies for the Docker image (backend/main.py + everything
+# it imports). Kept in sync BY HAND with environment.yml's pip section --
+# environment.yml stays the source of truth for local dev (conda + pip), but
+# a conda env inside a container is unnecessary weight when every one of
+# these ships a prebuilt wheel. If you add a pip dependency to
+# environment.yml, add it here too.
+#
+# psycopg here is psycopg[binary] rather than conda's psycopg + psycopg-c
+# pair -- same C-extension performance, but the wheel bundles libpq itself,
+# so the image doesn't need libpq dev headers installed.
+#
+# pytest is intentionally excluded: dev/CI only, never imported by the
+# running app.
+psycopg[binary]==3.3.4
+psycopg-pool==3.3.1
+python-dotenv==1.2.2
+fastapi==0.121.0
+uvicorn==0.38.0
+argon2-cffi==25.1.0
+itsdangerous==2.2.0
+google-auth==2.56.3
+email-validator==2.3.0
+openai==2.53.0
+pypdf==6.15.0
+python-multipart==0.0.32

@@ -1,0 +1,16 @@
+.git
+.claude
+.env
+__pycache__
+*.pyc
+.pytest_cache
+tests/
+logs/
+launchd/
+scripts/
+docs/
+database/backups/
+environment.yml
+Makefile
+README.md
+CLAUDE.md

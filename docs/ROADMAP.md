@@ -445,27 +445,47 @@ config for whichever host gets picked in 6.2, not a code change.
 
 ### 6.2 — Hosting shape
 
-- **Managed Postgres** (Neon, Supabase, Render, or Fly Postgres). At ~1,764
-  institutions / ~196k professors the dataset is still small by Postgres
-  standards, so the cheapest tier is genuinely sufficient — this is not a
-  scale problem. Migrate with `pg_dump` from local and `psql` restore into
-  the managed instance. Note the dataset is meaningfully bigger than the
-  ~4.4k-professor estimate this bullet originally assumed, so sanity-check
-  storage/row limits on whichever free tier is picked before committing to
-  it.
-- **One container** running `uvicorn backend.main:app`, serving `/api/*` and
-  mounting `frontend/` at `/`. No CORS, no separate static host, no CDN
-  needed at this size. Render or Fly.io both do container + managed Postgres
-  with the least ceremony; a plain VPS also works and is cheaper if you don't
-  mind owning TLS renewal.
-- **A real domain with TLS.** Not optional: Google OAuth requires registered
-  authorized origins and redirect URIs, and `Secure` cookies require HTTPS.
-- **Deploy = build image → run `python -m database.migrate` as a release
-  step → start the server.** Migrations run before the new code serves
-  traffic, which the numbered additive-migration design already supports.
-- **Automated backups**, either the provider's point-in-time recovery or a
-  scheduled `pg_dump`. The publication and topic data cost real API time to
-  collect and is not quickly reproducible.
+**Decided 2026-08-08: Render (web service) + Neon (Postgres).** Not Render's
+own free Postgres — it expires 30 days after creation and gets deleted after
+a 14-day grace period if not upgraded, which is not acceptable for data that
+cost real OpenAlex/ORCID API time to collect and, per the note below, isn't
+quickly reproducible. Neon's free tier persists indefinitely (idles on
+inactivity, doesn't delete data). Render's free web service is fine to start
+on — 750 free instance-hours/month, sleeps after 15 minutes idle with up to
+a ~1-minute cold start on the next request, which is a fine trade for an
+early launch with low traffic.
+
+✅ **Docker image and Blueprint written** (`Dockerfile`, `.dockerignore`,
+`requirements.txt`, `render.yaml`). `requirements.txt` mirrors
+`environment.yml`'s pip section by hand (conda itself isn't needed in the
+image — every pip dependency ships a prebuilt wheel, verified by dry-run
+installing all of them fresh); `psycopg[binary]` replaces conda's
+`psycopg`/`psycopg-c` pair for the same reason. `render.yaml`'s
+`preDeployCommand: python -m database.migrate` runs after the image builds
+and before the new instance takes traffic, per the additive-migration
+design in `database/migrate.py` (which already reads `DATABASE_URL`, no
+change needed there). `healthCheckPath: /healthz` wires up the endpoint
+Phase 6.1 added. `Makefile` gained `docker-build`/`docker-run` (local sanity
+check) and `restore-to-neon` (one-time `pg_dump | psql` move of the local
+database into Neon). `.env.example` documents every env var the app reads
+and which ones are still required in production.
+
+**Still open, and each needs a real decision/account, not just code:**
+
+- **Create the actual Render and Neon accounts/projects and get a domain
+  pointed at Render.** Nothing above deploys itself — `render.yaml` is a
+  Blueprint Render reads once you connect the repo. A real domain with TLS
+  is not optional: Google OAuth requires registered authorized origins and
+  redirect URIs, and `Secure` cookies require HTTPS.
+- **Pick a transactional email provider.** `EMAIL_BACKEND` only has a
+  `"console"` implementation right now (`backend/email.py`) — anything else
+  raises `NotImplementedError`. Fine for smoke-testing the deploy; signup/
+  verification/reset emails silently go nowhere a real user can see until
+  this is picked and implemented.
+- **Move the data.** `make restore-to-neon NEON_URL=...` once the Neon
+  project exists. Run `make backup` first regardless.
+- **Automated backups going forward**, either Neon's point-in-time recovery
+  (check what the free tier actually includes) or a scheduled `pg_dump`.
 
 ### 6.3 — Where the ingestion pipeline runs
 
