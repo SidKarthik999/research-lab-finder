@@ -15,6 +15,7 @@ import {
   signUp,
   verifyEmail,
 } from "../api.js";
+import { joinName } from "../name.js";
 import { navigate } from "../router.js";
 import { setCurrentUser } from "../session.js";
 
@@ -139,7 +140,8 @@ export function renderSignInView(container) {
 }
 
 export function renderSignUpView(container) {
-  const nameInput = el("input", { type: "text", id: "signup-name", name: "name", required: true });
+  const firstNameInput = el("input", { type: "text", id: "signup-first-name", name: "first_name", required: true });
+  const lastNameInput = el("input", { type: "text", id: "signup-last-name", name: "last_name", required: true });
   const emailInput = el("input", { type: "email", id: "signup-email", name: "email", required: true });
   const passwordInput = el("input", {
     type: "password",
@@ -155,7 +157,8 @@ export function renderSignUpView(container) {
   const form = el(
     "form",
     { class: "form" },
-    formField("Name", nameInput),
+    formField("First name", firstNameInput),
+    formField("Last name", lastNameInput),
     formField("Email", emailInput),
     formField("Password (at least 8 characters)", passwordInput),
     errorEl,
@@ -171,7 +174,7 @@ export function renderSignUpView(container) {
     event.preventDefault();
     errorEl.hidden = true;
     try {
-      const result = await signUp(emailInput.value, passwordInput.value, nameInput.value);
+      const result = await signUp(emailInput.value, passwordInput.value, joinName(firstNameInput.value, lastNameInput.value));
       form.hidden = true;
       successEl.textContent = result.message;
       successEl.hidden = false;

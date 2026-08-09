@@ -7,6 +7,7 @@
 
 import { el, mount } from "../dom.js";
 import { ApiError, getProfile, importResume, updateName, updateProfile } from "../api.js";
+import { joinName, splitName } from "../name.js";
 import { getCurrentUser, setCurrentUser } from "../session.js";
 
 function formField(labelText, inputEl, hint) {
@@ -132,13 +133,20 @@ export async function renderProfileView(container) {
   // through its own PUT /api/me rather than PUT /api/me/profile. Google
   // sign-in already gets a name for free from the profile; this is what
   // lets a password-signup student set theirs, or anyone fix a typo later.
-  const nameInput = el("input", { type: "text", id: "account-name", name: "name", value: user.name || "" });
+  const { first: initialFirst, last: initialLast } = splitName(user.name);
+  const firstNameInput = el("input", { type: "text", id: "account-first-name", name: "first_name", value: initialFirst });
+  const lastNameInput = el("input", { type: "text", id: "account-last-name", name: "last_name", value: initialLast });
   const nameErrorEl = el("p", { class: "form-error", hidden: true });
   const nameSuccessEl = el("p", { class: "form-success", hidden: true });
   const nameForm = el(
     "form",
     { class: "form" },
-    formField("Name", nameInput),
+    el(
+      "div",
+      { class: "profile-fields-row" },
+      formField("First name", firstNameInput),
+      formField("Last name", lastNameInput)
+    ),
     nameErrorEl,
     nameSuccessEl,
     el("button", { type: "submit" }, "Save name")
@@ -148,7 +156,7 @@ export async function renderProfileView(container) {
     nameErrorEl.hidden = true;
     nameSuccessEl.hidden = true;
     try {
-      const updatedUser = await updateName(nameInput.value);
+      const updatedUser = await updateName(joinName(firstNameInput.value, lastNameInput.value));
       setCurrentUser(updatedUser);
       nameSuccessEl.textContent = "Name saved.";
       nameSuccessEl.hidden = false;
