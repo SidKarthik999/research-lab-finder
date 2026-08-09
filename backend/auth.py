@@ -138,7 +138,7 @@ def signup(body: SignupRequest):
     verify_url = f"/#/verify-email?token={token}"
     send_email(
         body.email,
-        "Verify your Research Lab Finder account",
+        "Verify your Research Finder account",
         "Click to verify your email and finish creating your account:\n"
         f"{verify_url}\n\nIf you didn't request this, you can ignore this email.",
     )
@@ -183,7 +183,7 @@ def forgot_password(body: ForgotPasswordRequest):
         reset_url = f"/#/reset-password?token={token}"
         send_email(
             body.email,
-            "Reset your Research Lab Finder password",
+            "Reset your Research Finder password",
             f"Click to set a new password:\n{reset_url}\n\n"
             "If you didn't request this, you can ignore this email.",
         )

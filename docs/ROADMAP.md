@@ -1,4 +1,4 @@
-# Research Lab Finder — Roadmap
+# Research Finder — Roadmap
 
 **Last updated:** 2026-08-08
 

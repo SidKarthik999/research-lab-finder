@@ -1,4 +1,4 @@
-# Research Lab Finder
+# Research Finder
 
 A platform for discovering academic research labs based on research interests, location, institutions, and publications.
 

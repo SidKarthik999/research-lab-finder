@@ -1,4 +1,4 @@
-"""FastAPI search backend for Research Lab Finder.
+"""FastAPI search backend for Research Finder.
 
 Serves the search API under /api/* and the static frontend (../frontend)
 at /. The search path itself (/api/search and friends) is pure SQL
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     db.close_pool()
 
 
-app = FastAPI(title="Research Lab Finder API", lifespan=lifespan)
+app = FastAPI(title="Research Finder API", lifespan=lifespan)
 
 # https_only requires ENV=production (and therefore HTTPS) to be set --
 # never enforced in local dev, where the app is served over plain HTTP.
