@@ -64,6 +64,7 @@ class GoogleSignInRequest(BaseModel):
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str
+    name: str
 
 
 class LoginRequest(BaseModel):
@@ -142,7 +143,7 @@ def google_sign_in(body: GoogleSignInRequest, request: Request):
 @router.post("/api/auth/signup")
 def signup(body: SignupRequest):
     password_hash = hash_password(body.password)
-    token = make_email_verification_token(body.email, password_hash)
+    token = make_email_verification_token(body.email, password_hash, name=body.name)
     verify_url = f"{APP_BASE_URL}/#/verify-email?token={token}"
     send_email(
         body.email,
@@ -160,7 +161,11 @@ def verify_email(body: VerifyEmailRequest, request: Request):
     if payload is None:
         raise HTTPException(status_code=400, detail="That verification link is invalid or has expired.")
 
-    user_id = db.insert_user(payload["email"], email_verified=True)
+    # .get() rather than payload["name"] -- a verification token issued just
+    # before this field existed (in flight during a deploy) won't have the
+    # key, and insert_user's COALESCE(EXCLUDED.name, AppUser.name) already
+    # treats a missing name as "don't change it," so this degrades safely.
+    user_id = db.insert_user(payload["email"], name=payload.get("name"), email_verified=True)
     # A stale or repeated click of the same link re-runs both upserts
     # harmlessly, but must not overwrite a password set since the link was
     # issued (e.g. by a later reset) -- insert_auth_identity's ON CONFLICT

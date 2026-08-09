@@ -19,7 +19,12 @@ class TestEmailVerificationToken:
     def test_round_trips_email_and_password_hash(self):
         token = make_email_verification_token("student@example.com", "hashed-value")
         payload = read_email_verification_token(token)
-        assert payload == {"email": "student@example.com", "password_hash": "hashed-value"}
+        assert payload == {"email": "student@example.com", "password_hash": "hashed-value", "name": None}
+
+    def test_round_trips_name_when_given(self):
+        token = make_email_verification_token("student@example.com", "hashed-value", name="Jamie Lee")
+        payload = read_email_verification_token(token)
+        assert payload["name"] == "Jamie Lee"
 
     def test_rejects_garbage_token(self):
         assert read_email_verification_token("not-a-real-token") is None

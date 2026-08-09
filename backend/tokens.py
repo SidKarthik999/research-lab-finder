@@ -28,9 +28,9 @@ def _serializer():
     return URLSafeTimedSerializer(os.environ["SESSION_SECRET"])
 
 
-def make_email_verification_token(email, password_hash):
+def make_email_verification_token(email, password_hash, name=None):
     return _serializer().dumps(
-        {"email": email, "password_hash": password_hash}, salt=EMAIL_VERIFY_SALT
+        {"email": email, "password_hash": password_hash, "name": name}, salt=EMAIL_VERIFY_SALT
     )
 
 

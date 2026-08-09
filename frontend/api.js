@@ -127,8 +127,8 @@ export function signInWithGoogle(idToken) {
   return request("/api/auth/google", { method: "POST", body: { id_token: idToken } });
 }
 
-export function signUp(email, password) {
-  return request("/api/auth/signup", { method: "POST", body: { email, password } });
+export function signUp(email, password, name) {
+  return request("/api/auth/signup", { method: "POST", body: { email, password, name } });
 }
 
 export function verifyEmail(token) {
