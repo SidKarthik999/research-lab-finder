@@ -18,6 +18,7 @@ import {
 } from "./views/auth.js";
 import { renderProfileView } from "./views/profile.js";
 import { renderBookmarksView } from "./views/bookmarks.js";
+import { renderAdminView } from "./views/admin.js";
 
 const accountNavEl = document.getElementById("account-nav");
 const appEl = document.getElementById("app");
@@ -50,6 +51,7 @@ function renderAccountNav() {
       { class: "account-menu", hidden: true },
       el("a", { href: "#/profile" }, "Profile"),
       el("a", { href: "#/bookmarks" }, "Bookmarks"),
+      user.is_admin ? el("a", { href: "#/admin" }, "Admin") : null,
       el(
         "button",
         {
@@ -104,6 +106,7 @@ registerRoute("/reset-password", renderResetPasswordView);
 registerRoute("/verify-email", renderVerifyEmailView);
 registerRoute("/profile", renderProfileView);
 registerRoute("/bookmarks", renderBookmarksView);
+registerRoute("/admin", renderAdminView);
 
 // Registered before initSession() runs, so its internal notify() call
 // already covers the first render -- no separate initial call needed.

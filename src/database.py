@@ -950,3 +950,127 @@ def insert_llm_usage(user_id, kind):
     cursor.execute(query, (user_id, kind))
     connection.commit()
     cursor.close()
+
+# --- Admin dashboard (backend/admin.py gates access; these are plain reads) ---
+
+def get_recent_flags(limit=200):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    SELECT
+        ProfessorFlag.id,
+        ProfessorFlag.professor_id,
+        Professor.name AS professor_name,
+        Institution.name AS institution_name,
+        ProfessorFlag.reasons,
+        ProfessorFlag.details,
+        AppUser.email AS reporter_email,
+        ProfessorFlag.created_at
+    FROM ProfessorFlag
+    JOIN Professor ON Professor.id = ProfessorFlag.professor_id
+    LEFT JOIN Institution ON Institution.id = Professor.institution_id
+    LEFT JOIN AppUser ON AppUser.id = ProfessorFlag.user_id
+    ORDER BY ProfessorFlag.created_at DESC
+    LIMIT %s;
+    '''
+    cursor.execute(query, [limit])
+    columns = [desc.name for desc in cursor.description]
+    flags = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    return flags
+
+def get_signup_metrics():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT COUNT(*), COUNT(*) FILTER (WHERE email_verified) FROM AppUser;')
+    total, verified = cursor.fetchone()
+    # Last 30 days, zero-filled -- a day with no signups should show as 0,
+    # not be missing from the series (which would misalign a frontend chart
+    # that assumes one entry per day).
+    cursor.execute(
+        '''
+        SELECT day::date, COUNT(AppUser.id)
+        FROM generate_series(CURRENT_DATE - INTERVAL '29 days', CURRENT_DATE, INTERVAL '1 day') AS day
+        LEFT JOIN AppUser ON AppUser.created_at::date = day::date
+        GROUP BY day
+        ORDER BY day;
+        '''
+    )
+    daily = [{"date": str(day), "count": count} for day, count in cursor.fetchall()]
+    cursor.close()
+    return {"total": total, "verified": verified, "daily_last_30_days": daily}
+
+def get_ai_usage_metrics():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT kind, COUNT(*) FROM LlmUsage GROUP BY kind;')
+    total_by_kind = dict(cursor.fetchall())
+    cursor.execute(
+        '''
+        SELECT kind, COUNT(*)
+        FROM LlmUsage
+        WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+        GROUP BY kind;
+        '''
+    )
+    last_7_days_by_kind = dict(cursor.fetchall())
+    cursor.close()
+    return {"total_by_kind": total_by_kind, "last_7_days_by_kind": last_7_days_by_kind}
+
+def get_bookmark_metrics(top_n=10):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT COUNT(*) FROM Bookmark;')
+    total = cursor.fetchone()[0]
+    cursor.execute(
+        '''
+        SELECT Professor.id, Professor.name, Institution.name, COUNT(*) AS bookmark_count
+        FROM Bookmark
+        JOIN Professor ON Professor.id = Bookmark.professor_id
+        LEFT JOIN Institution ON Institution.id = Professor.institution_id
+        GROUP BY Professor.id, Professor.name, Institution.name
+        ORDER BY bookmark_count DESC, Professor.name
+        LIMIT %s;
+        ''',
+        [top_n],
+    )
+    top_professors = [
+        {"professor_id": pid, "professor_name": name, "institution_name": institution, "bookmark_count": count}
+        for pid, name, institution, count in cursor.fetchall()
+    ]
+    cursor.close()
+    return {"total": total, "top_professors": top_professors}
+
+def get_data_coverage_metrics():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT COUNT(*) FROM Institution;')
+    institutions = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM Publication;')
+    publications = cursor.fetchone()[0]
+    cursor.execute(
+        '''
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE Professor.orcid IS NOT NULL) AS with_orcid,
+            COUNT(*) FILTER (WHERE Professor.email IS NOT NULL) AS with_email,
+            COUNT(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM ProfessorTopic WHERE ProfessorTopic.professor_id = Professor.id
+            )) AS with_topics,
+            COUNT(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM ProfessorPublication WHERE ProfessorPublication.professor_id = Professor.id
+            )) AS with_publications
+        FROM Professor;
+        '''
+    )
+    total, with_orcid, with_email, with_topics, with_publications = cursor.fetchone()
+    cursor.close()
+    return {
+        "institutions": institutions,
+        "publications": publications,
+        "professors": total,
+        "professors_with_orcid": with_orcid,
+        "professors_with_email": with_email,
+        "professors_with_topics": with_topics,
+        "professors_with_publications": with_publications,
+    }

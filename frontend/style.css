@@ -1215,3 +1215,86 @@ button.publication-title:hover {
   gap: var(--space-3);
   margin-top: var(--space-1);
 }
+
+/* --- Admin dashboard --- */
+
+.admin-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+}
+
+.stat-card {
+  flex: 1 1 8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--surface-2);
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.stat-label {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 3rem;
+}
+
+.sparkline-bar {
+  flex: 1 1 auto;
+  min-width: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  opacity: 0.85;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: var(--space-2);
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--surface-2);
+}

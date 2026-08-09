@@ -21,6 +21,7 @@ import os
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 
+from backend.admin import ADMIN_EMAIL, is_admin_email
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
 from backend.rate_limit import check_rate_limit
@@ -123,6 +124,11 @@ def _user_public(user):
         "email_verified": email_verified,
         "name": name,
         "avatar_url": avatar_url,
+        # Lets the frontend show/hide the Admin nav link without guessing --
+        # the actual /api/admin/* routes enforce this themselves regardless
+        # (see backend/admin.py's require_admin), this is just so a
+        # non-admin never sees the link in the first place.
+        "is_admin": is_admin_email(email, ADMIN_EMAIL),
     }
 
 

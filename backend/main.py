@@ -18,12 +18,25 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Deliberately runs before any `backend.*`/`src.*` import below -- several of
+# those modules read an env var (ADMIN_EMAIL, APP_BASE_URL, OPENAI_API_KEY,
+# ...) into a module-level constant at import time, so .env has to already be
+# loaded by the time Python executes those modules, not just by the time
+# this file's own code runs. A load_dotenv() call placed after the imports
+# (as this used to be) works in production (Render sets real env vars, no
+# .env involved) but silently no-ops for local dev's `uvicorn
+# backend.main:app --reload`, since every one of those constants would
+# already have latched onto "unset" before load_dotenv() ever ran.
+load_dotenv()
+
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import ForeignKeyViolation
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
+from backend.admin import ADMIN_EMAIL, require_admin
 from backend.auth import APP_BASE_URL, router as auth_router
 from backend.email import send_email
 from backend.flags import FLAG_REASONS, build_flag_notification_email, valid_reason_ids
@@ -47,8 +60,6 @@ from backend.llm import (
 from backend.sessions import current_user, optional_current_user
 from src import database as db
 from src.database import get_connection
-
-load_dotenv()
 
 
 @asynccontextmanager
@@ -79,12 +90,13 @@ app.include_router(auth_router)
 
 RECENT_YEARS_CUTOFF = 3
 
-# Where a "Flag an issue" submission gets emailed (see /api/professors/{id}/
-# flag below). No default -- unlike SESSION_SECRET this doesn't fail startup
-# when unset, since flagging still works (the flag is always saved) and just
-# silently skips the email, the same "optional feature degrades gracefully"
-# handling as OPENAI_API_KEY being unset for AI summaries/cold email.
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+# ADMIN_EMAIL (imported from backend.admin, which also gates /api/admin/*)
+# is where a "Flag an issue" submission gets emailed -- see
+# /api/professors/{id}/flag below. No default -- unlike SESSION_SECRET this
+# doesn't fail startup when unset, since flagging still works (the flag is
+# always saved) and just silently skips the email, the same "optional
+# feature degrades gracefully" handling as OPENAI_API_KEY being unset for AI
+# summaries/cold email.
 
 # Per-user daily cap on cold-email generation (Phase 6.4) -- unlike AI
 # summaries, which cache after first view, every cold-email request is a
@@ -584,6 +596,29 @@ def flag_professor(professor_id: int, payload: ProfessorFlagRequest, user=Depend
         send_email(ADMIN_EMAIL, subject, body)
 
     return {"flagged": True}
+
+
+@app.get("/api/admin/flags")
+@db.with_connection
+def admin_flags(admin=Depends(require_admin)):
+    flags = db.get_recent_flags()
+    # reason_labels alongside the raw ids -- FLAG_REASONS' wording can change
+    # later without needing a data migration on already-stored flags, so the
+    # label is resolved at read time rather than stored.
+    for flag in flags:
+        flag["reason_labels"] = [FLAG_REASONS.get(reason_id, reason_id) for reason_id in flag["reasons"]]
+    return {"flags": flags}
+
+
+@app.get("/api/admin/metrics")
+@db.with_connection
+def admin_metrics(admin=Depends(require_admin)):
+    return {
+        "signups": db.get_signup_metrics(),
+        "ai_usage": db.get_ai_usage_metrics(),
+        "bookmarks": db.get_bookmark_metrics(),
+        "data_coverage": db.get_data_coverage_metrics(),
+    }
 
 
 @app.post("/api/professors/{professor_id}/summary")

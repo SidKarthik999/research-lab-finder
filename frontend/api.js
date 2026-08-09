@@ -190,6 +190,16 @@ export function getBookmarks() {
   return request("/api/me/bookmarks");
 }
 
+// --- admin ---
+
+export function getAdminFlags() {
+  return request("/api/admin/flags");
+}
+
+export function getAdminMetrics() {
+  return request("/api/admin/metrics");
+}
+
 export function importResume(file) {
   return uploadFile("/api/me/resume", file, "file");
 }
