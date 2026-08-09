@@ -196,6 +196,10 @@ export function getAdminFlags() {
   return request("/api/admin/flags");
 }
 
+export function deleteAdminFlag(flagId) {
+  return request(`/api/admin/flags/${flagId}`, { method: "DELETE" });
+}
+
 export function getAdminMetrics() {
   return request("/api/admin/metrics");
 }

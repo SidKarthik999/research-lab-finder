@@ -610,6 +610,14 @@ def admin_flags(admin=Depends(require_admin)):
     return {"flags": flags}
 
 
+@app.delete("/api/admin/flags/{flag_id}")
+@db.with_connection
+def admin_delete_flag(flag_id: int, admin=Depends(require_admin)):
+    if not db.delete_professor_flag(flag_id):
+        raise HTTPException(status_code=404, detail="Flag not found")
+    return {"deleted": True}
+
+
 @app.get("/api/admin/metrics")
 @db.with_connection
 def admin_metrics(admin=Depends(require_admin)):

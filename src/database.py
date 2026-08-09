@@ -979,6 +979,15 @@ def get_recent_flags(limit=200):
     cursor.close()
     return flags
 
+def delete_professor_flag(flag_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM ProfessorFlag WHERE id = %s RETURNING id;', [flag_id])
+    deleted = cursor.fetchone() is not None
+    connection.commit()
+    cursor.close()
+    return deleted
+
 def get_signup_metrics():
     connection = get_connection()
     cursor = connection.cursor()

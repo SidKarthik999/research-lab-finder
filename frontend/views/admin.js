@@ -7,7 +7,7 @@
 // what this page does.
 
 import { el, mount } from "../dom.js";
-import { ApiError, getAdminFlags, getAdminMetrics } from "../api.js";
+import { ApiError, deleteAdminFlag, getAdminFlags, getAdminMetrics } from "../api.js";
 import { getCurrentUser } from "../session.js";
 
 function statCard(label, value, hint) {
@@ -162,52 +162,79 @@ function renderMetrics(metrics) {
   );
 }
 
-function renderFlags(flags) {
-  if (flags.length === 0) {
-    return el("p", { class: "empty-state" }, "No flags reported yet.");
-  }
+// Stateful (unlike the pure statCard/sparkline/renderMetrics helpers above)
+// because deleting a flag needs to update what's on screen without
+// re-fetching the whole dashboard -- same shape as renderBookmarkList in
+// frontend/views/bookmarks.js, including no confirm() prompt before
+// deleting, consistent with that same "Remove bookmark" button.
+function renderFlagsSection(container, flags) {
+  function render() {
+    if (flags.length === 0) {
+      mount(container, el("p", { class: "empty-state" }, "No flags reported yet."));
+      return;
+    }
 
-  return el(
-    "div",
-    { class: "admin-table-wrap" },
-    el(
-      "table",
-      { class: "admin-table" },
+    mount(
+      container,
       el(
-        "thead",
-        {},
+        "div",
+        { class: "admin-table-wrap" },
         el(
-          "tr",
-          {},
-          el("th", {}, "Professor"),
-          el("th", {}, "Reported issues"),
-          el("th", {}, "Details"),
-          el("th", {}, "Reported by"),
-          el("th", {}, "When")
-        )
-      ),
-      el(
-        "tbody",
-        {},
-        ...flags.map((flag) =>
+          "table",
+          { class: "admin-table" },
           el(
-            "tr",
+            "thead",
             {},
             el(
-              "td",
+              "tr",
               {},
-              el("a", { href: `#/professor/${flag.professor_id}` }, flag.professor_name || "Unknown"),
-              flag.institution_name ? el("div", { class: "hint" }, flag.institution_name) : null
-            ),
-            el("td", {}, flag.reason_labels.length ? flag.reason_labels.join("; ") : "—"),
-            el("td", {}, flag.details || "—"),
-            el("td", {}, flag.reporter_email || "Anonymous"),
-            el("td", {}, new Date(flag.created_at).toLocaleString())
-          )
+              el("th", {}, "Professor"),
+              el("th", {}, "Reported issues"),
+              el("th", {}, "Details"),
+              el("th", {}, "Reported by"),
+              el("th", {}, "When"),
+              el("th", {})
+            )
+          ),
+          el("tbody", {}, ...flags.map(renderRow))
         )
       )
-    )
-  );
+    );
+  }
+
+  function renderRow(flag) {
+    const deleteBtn = el("button", { type: "button", class: "ghost" }, "Delete");
+    deleteBtn.addEventListener("click", async () => {
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = "Deleting…";
+      try {
+        await deleteAdminFlag(flag.id);
+        flags = flags.filter((f) => f.id !== flag.id);
+        render();
+      } catch {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = "Delete";
+      }
+    });
+
+    return el(
+      "tr",
+      {},
+      el(
+        "td",
+        {},
+        el("a", { href: `#/professor/${flag.professor_id}` }, flag.professor_name || "Unknown"),
+        flag.institution_name ? el("div", { class: "hint" }, flag.institution_name) : null
+      ),
+      el("td", {}, flag.reason_labels.length ? flag.reason_labels.join("; ") : "—"),
+      el("td", {}, flag.details || "—"),
+      el("td", {}, flag.reporter_email || "Anonymous"),
+      el("td", {}, new Date(flag.created_at).toLocaleString()),
+      el("td", {}, deleteBtn)
+    );
+  }
+
+  render();
 }
 
 export async function renderAdminView(container) {
@@ -242,10 +269,12 @@ export async function renderAdminView(container) {
     return;
   }
 
+  const flagsListEl = el("div", { class: "admin-flags-list" });
   mount(
     container,
     el("h1", {}, "Admin"),
     renderMetrics(metricsData),
-    el("div", { class: "card" }, el("h2", {}, "Flagged issues"), renderFlags(flagsData.flags))
+    el("div", { class: "card" }, el("h2", {}, "Flagged issues"), flagsListEl)
   );
+  renderFlagsSection(flagsListEl, flagsData.flags);
 }
