@@ -83,6 +83,10 @@ export function listInstitutionTypes() {
   return request("/api/institution-types");
 }
 
+export function listMetroAreas() {
+  return request("/api/metro-areas");
+}
+
 // --- professors ---
 
 export function getProfessor(id) {
@@ -107,6 +111,14 @@ export function getColdEmailDrafts(id) {
 
 export function updateColdEmailDraft(id, draftId, body) {
   return request(`/api/professors/${id}/cold-email`, { method: "PUT", body: { draft_id: draftId, body } });
+}
+
+export function listFlagReasons() {
+  return request("/api/flag-reasons");
+}
+
+export function flagProfessor(id, { reasons, details }) {
+  return request(`/api/professors/${id}/flag`, { method: "POST", body: { reasons, details } });
 }
 
 export function bookmarkProfessor(id) {

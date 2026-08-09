@@ -11,6 +11,7 @@ FILTER_KWARGS = {
     "city": "Palo Alto",
     "state": "California",
     "country": "US",
+    "metro": "nyc",
     "topic": "Neuroscience",
     "field": "Biology",
     "recent_only": True,
@@ -124,3 +125,21 @@ def test_unrecognized_institution_type_matches_nothing_not_everything():
     assert "Institution.carnegie_classification = ANY(%s)" in sql
     (raw_list,) = [p for p in params if isinstance(p, list)]
     assert raw_list == []
+
+
+def test_metro_filter_matches_curated_city_state_pairs():
+    sql, params = build_search_query(metro="nyc", limit=5)
+    assert "Institution.city ILIKE" in sql
+    assert "Institution.state ILIKE" in sql
+    assert "%Brooklyn%" in params
+    assert "%New York%" in params
+
+
+def test_metro_filter_placeholder_count_matches_params():
+    sql, params = build_search_query(metro="nyc", limit=5)
+    assert placeholder_count(sql) == len(params)
+
+
+def test_unrecognized_metro_matches_nothing_not_everything():
+    sql, params = build_search_query(metro="not_a_real_metro", limit=5)
+    assert "FALSE" in sql

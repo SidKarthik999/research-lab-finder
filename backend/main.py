@@ -24,11 +24,17 @@ from psycopg.errors import ForeignKeyViolation
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.auth import router as auth_router
+from backend.auth import APP_BASE_URL, router as auth_router
+from backend.email import send_email
+from backend.flags import FLAG_REASONS, build_flag_notification_email, valid_reason_ids
 from backend.institution_types import (
     INSTITUTION_TYPES,
     institution_type_for_classification,
     raw_classifications_for_type,
+)
+from backend.metro_areas import (
+    METRO_AREA_LABELS,
+    cities_for_metro,
 )
 from backend.llm import (
     ColdEmailGenerationNotConfigured,
@@ -73,6 +79,13 @@ app.include_router(auth_router)
 
 RECENT_YEARS_CUTOFF = 3
 
+# Where a "Flag an issue" submission gets emailed (see /api/professors/{id}/
+# flag below). No default -- unlike SESSION_SECRET this doesn't fail startup
+# when unset, since flagging still works (the flag is always saved) and just
+# silently skips the email, the same "optional feature degrades gracefully"
+# handling as OPENAI_API_KEY being unset for AI summaries/cold email.
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+
 # Per-user daily cap on cold-email generation (Phase 6.4) -- unlike AI
 # summaries, which cache after first view, every cold-email request is a
 # fresh, uncached OpenAI call, so this is what actually bounds the cost of
@@ -88,6 +101,7 @@ def build_search_query(
     city=None,
     state=None,
     country=None,
+    metro=None,
     topic=None,
     field=None,
     recent_only=False,
@@ -150,6 +164,31 @@ def build_search_query(
     if country:
         conditions.append("Institution.country_code ILIKE %s")
         params.append(f"%{country}%")
+    if metro:
+        # The "Near <city>" presets on the search page -- a plain city+state
+        # ILIKE match only caught the literal named city, missing the
+        # boroughs/suburbs anyone means by "near" (see backend/metro_areas.py
+        # for why the curated list is (city, state) pairs rather than city
+        # names alone). Institution.state is blank on a real minority of rows
+        # (a pre-existing ingestion gap, not something this filter should
+        # penalize), so a pair also matches when state is unset rather than
+        # silently excluding an otherwise-correct city match.
+        pairs = cities_for_metro(metro)
+        if pairs:
+            conditions.append(
+                "("
+                + " OR ".join(
+                    ["(Institution.city ILIKE %s AND (Institution.state ILIKE %s OR Institution.state IS NULL OR Institution.state = ''))"]
+                    * len(pairs)
+                )
+                + ")"
+            )
+            for metro_city, metro_state in pairs:
+                params.extend([f"%{metro_city}%", f"%{metro_state}%"])
+        else:
+            # Unrecognized metro id should match nothing, not everything --
+            # same principle as an unrecognized institution_type bucket.
+            conditions.append("FALSE")
     if topic:
         # OpenAlex's taxonomy is domain > field > subfield > (specific) topic
         # name -- there's rarely a topic literally named "Computer Science" or
@@ -296,6 +335,9 @@ def search_professors(
     city: str | None = None,
     state: str | None = None,
     country: str | None = None,
+    metro: str | None = Query(
+        None, description=f"Filter by curated metro area, one of: {', '.join(METRO_AREA_LABELS)}"
+    ),
     topic: str | None = Query(None, description="Filter by research topic name"),
     field: str | None = Query(None, description="Filter by research field, e.g. 'Physics and Astronomy'"),
     recent_only: bool = Query(
@@ -314,6 +356,7 @@ def search_professors(
         city=city,
         state=state,
         country=country,
+        metro=metro,
         topic=topic,
         field=field,
         recent_only=recent_only,
@@ -362,6 +405,15 @@ def list_institution_types():
     # table, so the list is always complete even before ingestion/matching
     # has reached every institution.
     return {"types": INSTITUTION_TYPES}
+
+
+@app.get("/api/metro-areas")
+def list_metro_areas():
+    # Same shape as /api/institution-types: a small, fixed set of ids backing
+    # the "Near" presets on the search page (see backend/metro_areas.py) --
+    # served from a dict, not a query, so the frontend never has to
+    # hardcode the id <-> label mapping itself.
+    return {"areas": [{"id": metro_id, "label": label} for metro_id, label in METRO_AREA_LABELS.items()]}
 
 
 @app.get("/api/topics")
@@ -489,6 +541,49 @@ def bookmark_professor(professor_id: int, user=Depends(current_user)):
 def unbookmark_professor(professor_id: int, user=Depends(current_user)):
     db.delete_bookmark(user[0], professor_id)
     return {"bookmarked": False}
+
+
+@app.get("/api/flag-reasons")
+def list_flag_reasons():
+    # Same shape as /api/institution-types and /api/metro-areas: a small,
+    # fixed set of ids served from a dict (backend/flags.py) so the
+    # frontend's checkboxes can't drift out of sync with what the backend
+    # actually records.
+    return {"reasons": [{"id": reason_id, "label": label} for reason_id, label in FLAG_REASONS.items()]}
+
+
+class ProfessorFlagRequest(BaseModel):
+    reasons: list[str] = []
+    details: str | None = None
+
+
+@app.post("/api/professors/{professor_id}/flag")
+@db.with_connection
+def flag_professor(professor_id: int, payload: ProfessorFlagRequest, user=Depends(optional_current_user)):
+    # No login required -- reporting a data-quality issue shouldn't be
+    # gated behind an account -- but a signed-in reporter's user_id is still
+    # attached, same optional-auth shape as professor_detail's is_bookmarked.
+    reasons = valid_reason_ids(payload.reasons)
+    details = (payload.details or "").strip() or None
+    if not reasons and not details:
+        raise HTTPException(status_code=400, detail="Select at least one issue or describe what's wrong.")
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT name FROM Professor WHERE id = %s;", [professor_id])
+    row = cursor.fetchone()
+    cursor.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Professor not found")
+    professor_name = row[0]
+
+    db.insert_professor_flag(professor_id, user[0] if user else None, reasons, details)
+
+    if ADMIN_EMAIL:
+        subject, body = build_flag_notification_email(professor_id, professor_name, reasons, details, APP_BASE_URL)
+        send_email(ADMIN_EMAIL, subject, body)
+
+    return {"flagged": True}
 
 
 @app.post("/api/professors/{professor_id}/summary")

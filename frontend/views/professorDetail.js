@@ -12,11 +12,13 @@ import { el, mount } from "../dom.js";
 import {
   ApiError,
   bookmarkProfessor,
+  flagProfessor,
   generateColdEmail,
   generateProfessorSummary,
   getColdEmailDrafts,
   getProfessor,
   getProfessorPublications,
+  listFlagReasons,
   unbookmarkProfessor,
   updateColdEmailDraft,
 } from "../api.js";
@@ -83,7 +85,12 @@ export async function renderProfessorDetailView(container, params) {
         institutionTypeBadge(professor.institution_type)
       )
     ),
-    signedIn ? renderBookmarkButton(professorId, professor.is_bookmarked) : null,
+    el(
+      "div",
+      { class: "detail-actions" },
+      signedIn ? renderBookmarkButton(professorId, professor.is_bookmarked) : null,
+      ...renderFlagControl(professorId)
+    ),
     topicChips(professor.topics),
     renderContactLine(professor),
     el("div", { class: "card" }, renderSummarySection(professor, professorId)),
@@ -119,6 +126,85 @@ function renderBookmarkButton(professorId, initiallyBookmarked) {
   });
 
   return button;
+}
+
+// Data on this site is ingested automatically (OpenAlex + ORCID, see
+// CLAUDE.md), so mistakes happen -- wrong person, stale contact info, a
+// dead link. This is a small, no-login-required way to report one: a
+// button that opens a native <dialog> with a short checkbox list (fetched
+// from GET /api/flag-reasons, not hardcoded -- same pattern as the Field
+// and Institution type dropdowns) plus a free-text "Other" field. Returns
+// an array (button + dialog) so it can be spread straight into the caller's
+// el(...) child list.
+function renderFlagControl(professorId) {
+  const dialog = el("dialog", { class: "flag-dialog" });
+  const reasonsList = el("div", { class: "flag-reasons" }, el("p", { class: "hint" }, "Loading…"));
+  const otherInput = el("textarea", { id: "flag-other", rows: "3", placeholder: "Anything else? (optional)" });
+  const statusEl = el("p", { class: "hint" });
+  const submitBtn = el("button", { type: "submit" }, "Submit");
+  const cancelBtn = el("button", { type: "button", class: "secondary" }, "Cancel");
+
+  const form = el(
+    "form",
+    { class: "flag-form" },
+    el("h2", {}, "Flag an issue with this professor"),
+    el("p", { class: "hint" }, "Let us know what looks wrong and we'll take a look."),
+    reasonsList,
+    el("div", { class: "field" }, el("label", { for: "flag-other" }, "Other"), otherInput),
+    statusEl,
+    el("div", { class: "form-actions" }, cancelBtn, submitBtn)
+  );
+  dialog.append(form);
+  cancelBtn.addEventListener("click", () => dialog.close());
+
+  (async () => {
+    try {
+      const data = await listFlagReasons();
+      reasonsList.replaceChildren(
+        ...data.reasons.map((reason) =>
+          el(
+            "label",
+            { class: "flag-reason" },
+            el("input", { type: "checkbox", value: reason.id }),
+            reason.label
+          )
+        )
+      );
+    } catch {
+      // The checkboxes are a convenience -- the "Other" field alone is
+      // still enough to submit a report if this fetch fails.
+      reasonsList.replaceChildren();
+    }
+  })();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reasons = [...reasonsList.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value);
+    const details = otherInput.value.trim();
+    if (reasons.length === 0 && !details) {
+      statusEl.textContent = "Select at least one issue or describe what's wrong.";
+      return;
+    }
+    submitBtn.disabled = true;
+    statusEl.textContent = "Submitting…";
+    try {
+      await flagProfessor(professorId, { reasons, details: details || null });
+      dialog.close();
+      openBtn.textContent = "✓ Reported";
+      openBtn.disabled = true;
+    } catch (err) {
+      statusEl.textContent = `Couldn't submit: ${err.message}`;
+      submitBtn.disabled = false;
+    }
+  });
+
+  const openBtn = el(
+    "button",
+    { type: "button", class: "secondary flag-button", onClick: () => dialog.showModal() },
+    "🚩 Flag an issue"
+  );
+
+  return [openBtn, dialog];
 }
 
 function summaryBox(text) {

@@ -11,14 +11,34 @@ import {
   listTopics,
   listFields,
   listInstitutionTypes,
+  listMetroAreas,
   getProfessorPublications,
 } from "../api.js";
 import { renderContactLine, topicChips, publicationList, institutionTypeBadge } from "../professor.js";
 
 const LIMIT = 20;
 
+// Module-level, not inside renderSearchView -- the router mounts a fresh
+// child <div> on every navigation (see router.js), so any state that needs
+// to survive "go to a professor, then come back" has to live outside that
+// per-mount closure. A plain module-scoped variable does that for free: the
+// module itself is only ever imported/evaluated once, so this persists for
+// the life of the page exactly like the router intends currentCleanup to.
+// Holds the last-rendered filters/page/results/scroll position, or null
+// before the first search of the session.
+let savedSearchState = null;
+
 export function renderSearchView(container) {
   let currentPage = 1;
+  // Set by a "Near" preset click; cleared as soon as the user edits
+  // city/state/country by hand, so a stale preset never silently narrows a
+  // manual search the user thinks they fully control.
+  let activeMetro = null;
+  // The exact result rows currently on screen -- kept alongside filters/page
+  // so navigating back can redisplay them directly rather than re-running
+  // the search (which could return different results if the data changed
+  // in between, and would defeat the point of "still there" restoration).
+  let lastResults = [];
 
   const fieldSelect = el("select", { id: "field", name: "field" }, el("option", { value: "" }, "Any field"));
   const institutionTypeSelect = el(
@@ -64,39 +84,53 @@ export function renderSearchView(container) {
     el("p", { class: "hero-subtitle" }, "Search professors by research field, topic, institution, or location.")
   );
 
-  // Preset labels only -- values are matched with ILIKE '%...%' against
-  // Institution.city/state (see build_search_query in backend/main.py), and
-  // are drawn from cities/states that actually have meaningful institution
-  // counts in the current data (checked against the DB, not guessed) so a
-  // click doesn't land on an empty result page.
-  const LOCATION_PRESETS = [
-    { label: "New York, NY", city: "New York", state: "New York" },
-    { label: "Chicago, IL", city: "Chicago", state: "Illinois" },
-    { label: "Los Angeles, CA", city: "Los Angeles", state: "California" },
-    { label: "Boston, MA", city: "Boston", state: "Massachusetts" },
-    { label: "Philadelphia, PA", city: "Philadelphia", state: "Pennsylvania" },
-  ];
-
-  function applyLocationPreset(preset) {
-    cityInput.value = preset.city;
-    stateInput.value = preset.state;
+  // Each preset expands server-side to a curated metro-area city list (see
+  // backend/metro_areas.py) rather than a single city -- "Near NYC" means
+  // the boroughs and inner suburbs too, not just literally the city named
+  // "New York". Fetched, not hardcoded, so the frontend never risks drifting
+  // out of sync with the backend's metro id <-> label mapping (same pattern
+  // as the Field/Institution type dropdowns below).
+  function applyLocationPreset(metroId) {
+    activeMetro = metroId;
+    cityInput.value = "";
+    stateInput.value = "";
     countryInput.value = "";
-    advancedDetails.open = true;
+    // Deliberately does NOT open the advanced-search accordion -- a "Near"
+    // click is meant to be a one-click shortcut, not a detour into a form
+    // section the user never asked to see.
     runSearch(1);
   }
 
   const locationPresetsEl = el(
     "div",
     { class: "quick-locations" },
-    el("span", { class: "quick-locations-label" }, "Near:"),
-    ...LOCATION_PRESETS.map((preset) =>
-      el(
-        "button",
-        { type: "button", class: "chip-button", onClick: () => applyLocationPreset(preset) },
-        preset.label
-      )
-    )
+    el("span", { class: "quick-locations-label" }, "Near:")
   );
+
+  (async () => {
+    try {
+      const data = await listMetroAreas();
+      for (const area of data.areas) {
+        locationPresetsEl.append(
+          el(
+            "button",
+            { type: "button", class: "chip-button", onClick: () => applyLocationPreset(area.id) },
+            area.label
+          )
+        );
+      }
+    } catch {
+      // Presets are a convenience shortcut -- leave the row label-only on failure.
+    }
+  })();
+
+  // A manual edit to any location field should drop a stale preset rather
+  // than silently keep narrowing results to it underneath what's now typed.
+  for (const input of [cityInput, stateInput, countryInput]) {
+    input.addEventListener("input", () => {
+      activeMetro = null;
+    });
+  }
 
   const advancedDetails = el(
     "details",
@@ -216,6 +250,9 @@ export function renderSearchView(container) {
       for (const name of data.fields) {
         fieldSelect.append(el("option", { value: name }, name));
       }
+      // A saved field selection can only be applied once its <option> exists
+      // -- restoreSearchState() (below) runs before this fetch resolves.
+      if (savedSearchState) fieldSelect.value = savedSearchState.filters.field;
     } catch {
       // Field is a nice-to-have filter -- leave it as "Any field" on failure.
     }
@@ -227,6 +264,7 @@ export function renderSearchView(container) {
       for (const type of data.types) {
         institutionTypeSelect.append(el("option", { value: type }, type));
       }
+      if (savedSearchState) institutionTypeSelect.value = savedSearchState.filters.institution_type;
     } catch {
       // Same as the field dropdown -- leave it as "Any institution type" on failure.
     }
@@ -238,6 +276,7 @@ export function renderSearchView(container) {
     for (const [key, value] of data.entries()) {
       if (value.trim()) filters[key] = value.trim();
     }
+    if (activeMetro) filters.metro = activeMetro;
     return filters;
   }
 
@@ -254,6 +293,7 @@ export function renderSearchView(container) {
       return;
     }
 
+    lastResults = data.results;
     renderResults(data.results);
     updatePagination(data.results.length);
   }
@@ -334,5 +374,59 @@ export function renderSearchView(container) {
   prevBtn.addEventListener("click", () => runSearch(currentPage - 1));
   nextBtn.addEventListener("click", () => runSearch(currentPage + 1));
 
-  runSearch(1);
+  // Coming back from a professor page (via the "Back to search" link or the
+  // browser back button -- both just change the hash, so both land here the
+  // same way) should restore exactly what was on screen, not start a new
+  // search from a blank form. Redisplays the saved results directly rather
+  // than re-fetching, so a page click + a data change elsewhere can't make
+  // "back" show something different from what was actually there.
+  if (savedSearchState) {
+    const { filters, page, results, scrollY, advancedOpen } = savedSearchState;
+    nameInput.value = filters.name;
+    textInput.value = filters.text;
+    topicInput.value = filters.topic;
+    institutionInput.value = filters.institution;
+    cityInput.value = filters.city;
+    stateInput.value = filters.state;
+    countryInput.value = filters.country;
+    recentOnlyInput.checked = filters.recent_only;
+    activeMetro = filters.metro;
+    advancedDetails.open = advancedOpen;
+    // fieldSelect/institutionTypeSelect are restored separately, above,
+    // once their options actually exist to select.
+
+    currentPage = page;
+    lastResults = results;
+    renderResults(results);
+    updatePagination(results.length);
+    // The saved scroll position only makes sense once the restored results
+    // have actually given the page the height to scroll to -- results are
+    // synchronous above, but the browser needs a paint before scrollTo lands
+    // correctly for content added in the same tick.
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
+  } else {
+    runSearch(1);
+  }
+
+  return function cleanup() {
+    savedSearchState = {
+      filters: {
+        name: nameInput.value,
+        text: textInput.value,
+        topic: topicInput.value,
+        institution: institutionInput.value,
+        city: cityInput.value,
+        state: stateInput.value,
+        country: countryInput.value,
+        recent_only: recentOnlyInput.checked,
+        field: fieldSelect.value,
+        institution_type: institutionTypeSelect.value,
+        metro: activeMetro,
+      },
+      page: currentPage,
+      results: lastResults,
+      scrollY: window.scrollY,
+      advancedOpen: advancedDetails.open,
+    };
+  };
 }

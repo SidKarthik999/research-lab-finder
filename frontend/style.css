@@ -1117,3 +1117,74 @@ button.publication-title:hover {
   color: var(--muted);
   margin: 0.15rem 0;
 }
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* --- Flag an issue --- */
+
+.flag-button {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.flag-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0;
+  color: var(--fg);
+  background: var(--surface);
+  box-shadow: 0 20px 48px -16px rgba(var(--shadow), 0.5);
+  max-width: min(28rem, 92vw);
+}
+
+.flag-dialog::backdrop {
+  background: rgba(var(--shadow), 0.45);
+}
+
+.flag-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.flag-form h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.flag-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.flag-reason {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.flag-reason input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}

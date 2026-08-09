@@ -833,6 +833,20 @@ def insert_bookmark(user_id, professor_id):
     cursor.close()
     return row[0] if row else None
 
+def insert_professor_flag(professor_id, user_id, reasons, details):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    INSERT INTO ProfessorFlag (professor_id, user_id, reasons, details)
+    VALUES (%s, %s, %s, %s)
+    RETURNING id;
+    '''
+    cursor.execute(query, (professor_id, user_id, reasons, details))
+    flag_id = cursor.fetchone()[0]
+    connection.commit()
+    cursor.close()
+    return flag_id
+
 def delete_bookmark(user_id, professor_id):
     connection = get_connection()
     cursor = connection.cursor()
