@@ -203,17 +203,25 @@ function renderFlagsSection(container, flags) {
   }
 
   function renderRow(flag) {
-    const deleteBtn = el("button", { type: "button", class: "ghost" }, "Delete");
+    const deleteBtn = el(
+      "button",
+      { type: "button", class: "ghost icon-button", "aria-label": "Delete this flag", title: "Delete" },
+      // Same "html" escape hatch as the search button's icon in
+      // frontend/views/search.js -- a fixed, trusted SVG string, never
+      // user-controlled data.
+      el("span", {
+        class: "btn-icon",
+        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
+      })
+    );
     deleteBtn.addEventListener("click", async () => {
       deleteBtn.disabled = true;
-      deleteBtn.textContent = "Deleting…";
       try {
         await deleteAdminFlag(flag.id);
         flags = flags.filter((f) => f.id !== flag.id);
         render();
       } catch {
         deleteBtn.disabled = false;
-        deleteBtn.textContent = "Delete";
       }
     });
 

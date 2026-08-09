@@ -777,6 +777,26 @@ button.ghost:hover {
   box-shadow: none;
 }
 
+/* Icon-only buttons (e.g. the admin flags table's delete action) --
+   square, centered, no underline-on-hover since there's no text to
+   underline. */
+button.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+
+button.icon-button:hover {
+  text-decoration: none;
+}
+
+button.icon-button.ghost:hover {
+  color: var(--error);
+}
+
 #search-form button {
   grid-column: 1 / -1;
   justify-self: start;
