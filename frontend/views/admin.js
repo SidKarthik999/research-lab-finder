@@ -67,13 +67,17 @@ function renderMetrics(metrics) {
     el(
       "div",
       { class: "card" },
-      el("h2", {}, "AI feature usage"),
+      el("h2", {}, "Cold email usage"),
+      // AI summaries are deliberately not shown here -- they're generated
+      // once per professor and cached forever (see ai_summary caching in
+      // backend/main.py's professor_summary), so a summary count doesn't
+      // track ongoing usage or cost the way cold email (regenerated fresh
+      // on every request) does. Still logged in LlmUsage either way, in
+      // case that changes.
       el(
         "div",
         { class: "stat-row" },
-        statCard("AI summaries (all time)", ai_usage.total_by_kind.ai_summary || 0),
         statCard("Cold emails (all time)", ai_usage.total_by_kind.cold_email || 0),
-        statCard("AI summaries (7 days)", ai_usage.last_7_days_by_kind.ai_summary || 0),
         statCard("Cold emails (7 days)", ai_usage.last_7_days_by_kind.cold_email || 0)
       )
     ),
