@@ -6,8 +6,8 @@
 // one long scroll mixing "things I saved" with "my own info".
 
 import { el, mount } from "../dom.js";
-import { ApiError, getProfile, importResume, updateProfile } from "../api.js";
-import { getCurrentUser } from "../session.js";
+import { ApiError, getProfile, importResume, updateName, updateProfile } from "../api.js";
+import { getCurrentUser, setCurrentUser } from "../session.js";
 
 function formField(labelText, inputEl, hint) {
   const children = [el("label", { for: inputEl.id }, labelText), inputEl];
@@ -127,6 +127,38 @@ export async function renderProfileView(container) {
     resumeImportBtn.disabled = false;
   });
 
+  // Separate from the StudentProfile form below -- name lives on the
+  // account itself (AppUser), not the research-interest form, and is saved
+  // through its own PUT /api/me rather than PUT /api/me/profile. Google
+  // sign-in already gets a name for free from the profile; this is what
+  // lets a password-signup student set theirs, or anyone fix a typo later.
+  const nameInput = el("input", { type: "text", id: "account-name", name: "name", value: user.name || "" });
+  const nameErrorEl = el("p", { class: "form-error", hidden: true });
+  const nameSuccessEl = el("p", { class: "form-success", hidden: true });
+  const nameForm = el(
+    "form",
+    { class: "form" },
+    formField("Name", nameInput),
+    nameErrorEl,
+    nameSuccessEl,
+    el("button", { type: "submit" }, "Save name")
+  );
+  nameForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    nameErrorEl.hidden = true;
+    nameSuccessEl.hidden = true;
+    try {
+      const updatedUser = await updateName(nameInput.value);
+      setCurrentUser(updatedUser);
+      nameSuccessEl.textContent = "Name saved.";
+      nameSuccessEl.hidden = false;
+    } catch (err) {
+      nameErrorEl.textContent = err.message;
+      nameErrorEl.hidden = false;
+    }
+  });
+  const accountSection = el("div", { class: "card" }, el("h2", {}, "Account"), nameForm);
+
   const resumeSection = el(
     "div",
     { class: "card" },
@@ -187,6 +219,7 @@ export async function renderProfileView(container) {
   mount(
     container,
     el("h1", {}, "Your profile"),
+    accountSection,
     resumeSection,
     el("h2", {}, "Your info"),
     el(

@@ -162,6 +162,10 @@ export async function getMe() {
   }
 }
 
+export function updateName(name) {
+  return request("/api/me", { method: "PUT", body: { name } });
+}
+
 export function getProfile() {
   return request("/api/me/profile");
 }

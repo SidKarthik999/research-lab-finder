@@ -19,7 +19,7 @@ already exists under that email.
 import os
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
@@ -239,6 +239,22 @@ def logout(request: Request):
 @router.get("/api/me")
 def me(user=Depends(current_user)):
     return _user_public(user)
+
+
+class UpdateNameRequest(BaseModel):
+    name: str = Field(min_length=1)
+
+
+@router.put("/api/me")
+@db.with_connection
+def update_me(body: UpdateNameRequest, user=Depends(current_user)):
+    # Separate from /api/me/profile below -- name lives on AppUser (the
+    # account itself), not StudentProfile (the research-interest form).
+    # Google sign-in already gets a name for free from the profile; this is
+    # what lets a password-signup student (or anyone who wants to change
+    # it later) set or fix theirs.
+    db.update_user_name(user[0], body.name)
+    return _user_public(db.get_user_by_id(user[0]))
 
 
 class StudentProfileRequest(BaseModel):

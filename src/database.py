@@ -624,6 +624,19 @@ def insert_user(email, name=None, avatar_url=None, email_verified=False):
     cursor.close()
     return user_id
 
+def update_user_name(user_id, name):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE AppUser
+    SET name = %s,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (name, user_id))
+    connection.commit()
+    cursor.close()
+
 def mark_user_email_verified(user_id):
     connection = get_connection()
     cursor = connection.cursor()
