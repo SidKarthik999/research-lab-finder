@@ -460,14 +460,16 @@ early launch with low traffic.
 `environment.yml`'s pip section by hand (conda itself isn't needed in the
 image — every pip dependency ships a prebuilt wheel, verified by dry-run
 installing all of them fresh); `psycopg[binary]` replaces conda's
-`psycopg`/`psycopg-c` pair for the same reason. `render.yaml`'s
-`preDeployCommand: python -m database.migrate` runs after the image builds
-and before the new instance takes traffic, per the additive-migration
-design in `database/migrate.py` (which already reads `DATABASE_URL`, no
-change needed there). `healthCheckPath: /healthz` wires up the endpoint
-Phase 6.1 added. `Makefile` gained `docker-build`/`docker-run` (local sanity
-check) and `restore-to-neon` (one-time `pg_dump | psql` move of the local
-database into Neon). `.env.example` documents every env var the app reads
+`psycopg`/`psycopg-c` pair for the same reason. Migrations run at container
+start (`python -m database.migrate && uvicorn ...`, baked into the
+Dockerfile's `CMD`) rather than as a Render `preDeployCommand` release
+step — that field is paid-plan-only, and this service deploys on the free
+plan; `database/migrate.py` is idempotent, so re-running it on every boot
+(including free-tier cold starts after the instance sleeps) is safe and
+cheap. `healthCheckPath: /healthz` wires up the endpoint Phase 6.1 added.
+`Makefile` gained `docker-build`/`docker-run` (local sanity check) and
+`restore-to-neon` (one-time `pg_dump | psql` move of the local database into
+Neon). `.env.example` documents every env var the app reads
 and which ones are still required in production.
 
 **Still open, and each needs a real decision/account, not just code:**

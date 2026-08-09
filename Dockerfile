@@ -1,7 +1,6 @@
 # Single container serving /api/* and the static frontend from one origin
 # (see docs/ROADMAP.md Phase 6.2) -- no separate static host, no CDN needed
-# at this dataset's size. Deploy = build this image -> run
-# `python -m database.migrate` as a release step -> start uvicorn.
+# at this dataset's size.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -28,4 +27,11 @@ COPY frontend/ frontend/
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT}"]
+# Migrations run at container start rather than as a separate release step
+# -- Render's preDeployCommand requires a paid plan, and this dataset's
+# free-tier deploy can't use it. database/migrate.py is idempotent (tracks
+# applied versions in schema_migrations, every migration file uses
+# CREATE TABLE IF NOT EXISTS/similar), so re-running it on every boot --
+# including free-tier cold starts after the instance sleeps -- is safe and
+# adds a sub-second check, not a real cost.
+CMD ["sh", "-c", "python -m database.migrate && uvicorn backend.main:app --host 0.0.0.0 --port ${PORT}"]

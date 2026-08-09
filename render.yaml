@@ -18,10 +18,12 @@ services:
     plan: free
     healthCheckPath: /healthz
     autoDeploy: true
-    # Runs after the image builds, before the new instance starts serving --
-    # migrations land before traffic does, per the additive-migration design
-    # in database/migrate.py.
-    preDeployCommand: python -m database.migrate
+    # No preDeployCommand -- that's a paid-plan-only feature, and this
+    # service is on the free plan. Migrations instead run at container
+    # start, baked into the Dockerfile's CMD (see Dockerfile's comment):
+    # `python -m database.migrate && uvicorn ...`. Idempotent, so re-running
+    # it on every boot (including free-tier cold starts after sleep) is
+    # safe.
     envVars:
       - key: ENV
         value: production
