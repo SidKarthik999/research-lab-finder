@@ -1059,11 +1059,12 @@ def get_data_coverage_metrics():
             )) AS with_topics,
             COUNT(*) FILTER (WHERE EXISTS (
                 SELECT 1 FROM ProfessorPublication WHERE ProfessorPublication.professor_id = Professor.id
-            )) AS with_publications
+            )) AS with_publications,
+            COUNT(*) FILTER (WHERE Professor.ai_summary IS NOT NULL) AS with_ai_summary
         FROM Professor;
         '''
     )
-    total, with_orcid, with_email, with_topics, with_publications = cursor.fetchone()
+    total, with_orcid, with_email, with_topics, with_publications, with_ai_summary = cursor.fetchone()
     cursor.close()
     return {
         "institutions": institutions,
@@ -1073,4 +1074,9 @@ def get_data_coverage_metrics():
         "professors_with_email": with_email,
         "professors_with_topics": with_topics,
         "professors_with_publications": with_publications,
+        # A running total, not a rate -- once generated, a summary is
+        # cached forever (see professor_summary in backend/main.py), so
+        # this reads as "how much of the catalog has one so far", not
+        # "how many were generated recently" the way cold-email usage does.
+        "professors_with_ai_summary": with_ai_summary,
     }

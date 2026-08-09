@@ -148,6 +148,14 @@ function renderMetrics(metrics) {
           "With publications",
           pct(data_coverage.professors_with_publications, data_coverage.professors),
           `${data_coverage.professors_with_publications} professors`
+        ),
+        // A running total, not a rate -- a summary is cached forever once
+        // generated (see backend/main.py's professor_summary), so this
+        // reads as "how much of the catalog has one so far".
+        statCard(
+          "With AI summary",
+          pct(data_coverage.professors_with_ai_summary, data_coverage.professors),
+          `${data_coverage.professors_with_ai_summary} professors`
         )
       )
     )
