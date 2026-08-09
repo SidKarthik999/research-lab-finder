@@ -27,6 +27,13 @@ services:
     envVars:
       - key: ENV
         value: production
+      # backend/auth.py: prefixes verification/reset email links so they're
+      # absolute (clickable from an actual mail client) rather than a bare
+      # "/#/..." path, which only resolves when clicked from within the
+      # running app. Not a secret, so a plain value rather than sync: false
+      # -- update this if the canonical domain ever changes.
+      - key: APP_BASE_URL
+        value: https://research-finder.com
       # Neon connection string, e.g.
       # postgresql://user:password@ep-xxx.neon.tech/research_lab_finder?sslmode=require
       - key: DATABASE_URL

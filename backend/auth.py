@@ -48,6 +48,14 @@ GENERIC_AUTH_ERROR = "Invalid email or password."
 # addresses have accounts here.
 GENERIC_CHECK_EMAIL = "If that email can receive mail, check it for a link."
 
+# Verification/reset links go out in real emails, opened in a mail client
+# with no "current page" to resolve a relative URL against -- unlike a link
+# clicked *within* the app, a bare "/#/verify-email?token=..." in an email
+# body isn't reliably clickable at all. APP_BASE_URL makes these absolute.
+# Defaults to local dev's own origin so this still works with zero setup
+# before APP_BASE_URL is set in production.
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
+
 
 class GoogleSignInRequest(BaseModel):
     id_token: str
@@ -135,7 +143,7 @@ def google_sign_in(body: GoogleSignInRequest, request: Request):
 def signup(body: SignupRequest):
     password_hash = hash_password(body.password)
     token = make_email_verification_token(body.email, password_hash)
-    verify_url = f"/#/verify-email?token={token}"
+    verify_url = f"{APP_BASE_URL}/#/verify-email?token={token}"
     send_email(
         body.email,
         "Verify your Research Finder account",
@@ -180,7 +188,7 @@ def forgot_password(body: ForgotPasswordRequest):
     user = db.get_user_by_email(body.email)
     if user is not None:
         token = make_password_reset_token(user[0])
-        reset_url = f"/#/reset-password?token={token}"
+        reset_url = f"{APP_BASE_URL}/#/reset-password?token={token}"
         send_email(
             body.email,
             "Reset your Research Finder password",
