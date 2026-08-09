@@ -571,6 +571,33 @@ button.chip-button:hover {
   box-shadow: none;
 }
 
+/* Marks the currently-selected "Near" preset -- without this a click had no
+   visible effect beyond the results changing, which also meant no visible
+   way to tell there was a filter to undo. */
+button.chip-button.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+
+button.chip-button.active:hover {
+  color: var(--accent-fg);
+}
+
+/* Only shown once a preset is active (see setActivePreset in search.js) --
+   a plain, muted chip rather than the filled "active" look, since it's an
+   undo action, not another location to pick. */
+button.chip-button.chip-clear {
+  background: transparent;
+  color: var(--muted);
+  border-style: dashed;
+}
+
+button.chip-button.chip-clear:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* .form's 24rem max-width is right for the narrow auth cards but far too
    tight for a content-heavy form like the student profile (four textareas)
    -- .form-wide overrides just the width, keeping .form's card look

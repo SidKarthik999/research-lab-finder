@@ -90,14 +90,31 @@ export function renderSearchView(container) {
   // "New York". Fetched, not hardcoded, so the frontend never risks drifting
   // out of sync with the backend's metro id <-> label mapping (same pattern
   // as the Field/Institution type dropdowns below).
-  function applyLocationPreset(metroId) {
+  //
+  // presetButtons tracks every rendered chip so the currently-selected one
+  // can be highlighted (and un-highlighted) -- without that, clicking a
+  // preset gave no visible sign a filter was even applied, let alone how to
+  // undo it, which is exactly the "stuck with no way back" problem this is
+  // fixing.
+  const presetButtons = [];
+  const clearLocationBtn = el(
+    "button",
+    { type: "button", class: "chip-button chip-clear", hidden: true, onClick: () => setActivePreset(null) },
+    "✕ All locations"
+  );
+
+  function setActivePreset(metroId) {
     activeMetro = metroId;
     cityInput.value = "";
     stateInput.value = "";
     countryInput.value = "";
+    for (const { id, button } of presetButtons) {
+      button.classList.toggle("active", id === metroId);
+    }
+    clearLocationBtn.hidden = !metroId;
     // Deliberately does NOT open the advanced-search accordion -- a "Near"
-    // click is meant to be a one-click shortcut, not a detour into a form
-    // section the user never asked to see.
+    // click (or clearing it) is meant to be a one-click shortcut, not a
+    // detour into a form section the user never asked to see.
     runSearch(1);
   }
 
@@ -111,13 +128,23 @@ export function renderSearchView(container) {
     try {
       const data = await listMetroAreas();
       for (const area of data.areas) {
-        locationPresetsEl.append(
-          el(
-            "button",
-            { type: "button", class: "chip-button", onClick: () => applyLocationPreset(area.id) },
-            area.label
-          )
+        const button = el(
+          "button",
+          { type: "button", class: "chip-button", onClick: () => setActivePreset(area.id) },
+          area.label
         );
+        presetButtons.push({ id: area.id, button });
+        locationPresetsEl.append(button);
+      }
+      locationPresetsEl.append(clearLocationBtn);
+      // A saved metro selection can only be highlighted once its chip
+      // actually exists -- the restore logic (below) runs before this
+      // fetch resolves, same reason fieldSelect/institutionTypeSelect
+      // restore their values here rather than in that block.
+      if (savedSearchState) {
+        const metro = savedSearchState.filters.metro;
+        for (const { id, button } of presetButtons) button.classList.toggle("active", id === metro);
+        clearLocationBtn.hidden = !metro;
       }
     } catch {
       // Presets are a convenience shortcut -- leave the row label-only on failure.
@@ -129,6 +156,8 @@ export function renderSearchView(container) {
   for (const input of [cityInput, stateInput, countryInput]) {
     input.addEventListener("input", () => {
       activeMetro = null;
+      for (const { button } of presetButtons) button.classList.remove("active");
+      clearLocationBtn.hidden = true;
     });
   }
 
