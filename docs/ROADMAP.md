@@ -1,20 +1,20 @@
 # Research Finder — Roadmap
 
-**Last updated:** 2026-08-08
+**Last updated:** 2026-08-09
 
-> **Next up: Phase 6** (shipping to real users). Phase 5A shipped in full on
-> 2026-08-07/08 — profiles, AI summaries, accounts, cold-email drafting,
-> bookmarking, and resume import are all live — and Phase 3's coverage
-> widening + Carnegie classification landed alongside it. Phase 6.1 (pooled
-> DB connections, `DATABASE_URL`, `/healthz`) is also already done. What's
-> left to actually put this in front of a student is the rest of Phase 6
-> (hosting, guardrails, trust/legal, monitoring) — **promoted ahead of
-> Phase 4 on 2026-08-08 at the user's direction**: the app should reach other
-> users before more content (labs) is added. See "Suggested order" for the
-> full reasoning. Phase numbers are deliberately *not* renumbered: several
-> code comments (`src/ingestion/openalex.py`, migration headers) already cite
-> phase numbers, and silently shifting them would make those comments point
-> at the wrong thing.
+> **Next up: Phase 6.5** (trust/legal). The app — renamed from "Research Lab
+> Finder" to "Research Finder" on 2026-08-08 — is live at
+> `https://research-finder.com` on Render + Neon, with Google OAuth, Resend
+> email delivery, and every LLM endpoint now capped/rate-limited (Phases
+> 6.1–6.4 all done as of 2026-08-09). What's left before opening this up to
+> real users is 6.5 (privacy policy, data provenance statement, a
+> correction/removal contact path), then 6.6 (monitoring). This was
+> **promoted ahead of Phase 4 on 2026-08-08 at the user's direction**: the
+> app should reach other users before more content (labs) is added. See
+> "Suggested order" for the full reasoning. Phase numbers are deliberately
+> *not* renumbered: several code comments (`src/ingestion/openalex.py`,
+> migration headers) already cite phase numbers, and silently shifting them
+> would make those comments point at the wrong thing.
 
 ## The goal
 
@@ -437,11 +437,12 @@ first time. Session cookie flags (`Secure`, gated on `ENV=production`) landed
 alongside the accounts work in Phase 5A rather than here, since that's where
 the session gets created — see `backend/sessions.py`.
 
-One remaining open item from the original 6.1 list: **secrets still need to
-come from a real platform secret store in production** (`OPENAI_API_KEY`,
-`SESSION_SECRET`, `GOOGLE_CLIENT_ID`, the email-provider key), failing loudly
-at startup if any are missing — `.env` stays for local dev only. This is
-config for whichever host gets picked in 6.2, not a code change.
+✅ The remaining open item from the original 6.1 list — **secrets coming
+from a real platform secret store in production** — is also done as of the
+6.2 deploy: `DATABASE_URL`, `SESSION_SECRET`, `OPENAI_API_KEY`,
+`GOOGLE_CLIENT_ID`/`SECRET`, `RESEND_API_KEY`, and `APP_BASE_URL` all live
+in Render's Environment tab, not in a committed file. `.env` stays for
+local dev only.
 
 ### 6.2 — Hosting shape ✅ **live (2026-08-08)**
 
@@ -554,7 +555,7 @@ machines, or GitHub Actions on a schedule) — the scripts are already
 independent module entry points, so this would be a scheduling change, not
 a rewrite.
 
-### 6.4 — Guardrails before real users
+### 6.4 — Guardrails before real users ✅ **done (2026-08-09)**
 
 The LLM endpoints from Phase 5A change the risk profile. Without limits, one
 user or one script can spend real money on your API key. This now includes
@@ -577,8 +578,15 @@ upload, uncached, same as email drafting.
   routinely. A usage row is recorded on a real (billed) API call whether it
   succeeds or the model refuses — only the "not configured" case (caught
   before any API call) doesn't count.
-- **A monthly spend alert** on the OpenAI account, so a runaway loop is
-  discovered by a notification rather than an invoice.
+- ✅ **Monthly spend alert set (2026-08-09): $20/month** on the OpenAI
+  account (Settings → Billing → Limits). Worth noting since it changes what
+  this guardrail actually does: as of early 2026, OpenAI's monthly budget
+  threshold no longer hard-stops API access when hit — it sends an email
+  and a dashboard banner while requests keep going through and billing
+  continues. So this is an early-warning tripwire, not a hard cap; it's the
+  per-user daily caps above (Phase 6.4) and rate limiting that actually
+  bound worst-case cost, this just makes sure a runaway loop gets noticed
+  quickly rather than showing up as a surprise invoice.
 - ✅ **Rate limits on auth endpoints (2026-08-08).** `login`, `signup`, and
   `forgot` are all limited by both email and IP, via a small in-process
   fixed-window counter (`backend/rate_limit.py`) rather than slowapi/limits
@@ -593,10 +601,12 @@ upload, uncached, same as email drafting.
   exact nuisance found and confirmed live before this was built (see
   Phase 5A's account-linking notes above). A 429 is returned generically,
   same anti-enumeration principle as the rest of this file.
-- **Treat email drafting as a spam vector.** It generates persuasive
-  messages addressed to real named academics. Requiring an account plus a
-  daily cap plus keeping the send action manual (the app drafts, the student
-  sends) is the mitigation — do not add a "send for me" button.
+- ✅ **Treat email drafting as a spam vector — satisfied.** It generates
+  persuasive messages addressed to real named academics. The mitigation
+  (account required, a daily cap, and the send action staying manual — the
+  app drafts, the student sends) is now fully in place: accounts were
+  already required from Phase 5A, the daily cap landed above, and there has
+  never been a "send for me" button. Keep it that way — don't add one.
 
 ### 6.5 — Trust, and the fact that this app is about real people
 
@@ -657,17 +667,16 @@ user telling you.
    ongoing — no action needed, just time).
 6. ~~**Phase 6.1**~~ — done (2026-08-07). Pooled connections, `DATABASE_URL`,
    `/healthz`, empty-DB migration check.
-7. **Phase 6 (6.2–6.7) — next up, at the user's explicit request.** The
-   product works end to end on `localhost`; the only thing separating that
-   from "other people can use it" is hosting, secrets, guardrails, and the
-   trust/legal basics in 6.5. This is now prioritized **ahead of Phase 4**:
-   the goal is to get the app in front of other users before adding more
-   content. Suggested internal order: 6.2 (hosting shape) and the remaining
-   6.1 secrets item first, since nothing else in Phase 6 works without a
-   deployed target → 6.4 (guardrails) before opening it up publicly, since
-   the LLM endpoints are live and unmetered right now → 6.5 (trust/legal)
-   before real users, not after → 6.3 and 6.6 can trail slightly since
-   they're operational rather than blocking.
+7. ~~**Phase 6.1, 6.2, 6.3, 6.4**~~ — all done as of 2026-08-09. Deployed
+   live at `https://research-finder.com` (Render + Neon), Google OAuth
+   fixed for the real domain, Resend wired up for real email delivery,
+   local ingestion pointed at production, and every LLM endpoint is now
+   capped/rate-limited (auth endpoints by IP+email, cold-email/resume
+   import by a daily per-user cap, plus a $20/month OpenAI spend alert as
+   an early-warning tripwire on top of those). **Next up: 6.5**
+   (trust/legal — privacy policy, data provenance statement, a contact path
+   for correction/removal requests) before opening this up to real users,
+   then 6.6 (monitoring) and 6.7 is just a cost writeup, not an action item.
 8. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
    until the app is somewhere other people can reach it; this was the
    original point of promoting Phase 6.
