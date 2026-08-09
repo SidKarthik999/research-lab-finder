@@ -519,23 +519,31 @@ the Blueprint is deployed and live.
 - **Automated backups going forward**, either Neon's point-in-time recovery
   (check what the Launch plan actually includes) or a scheduled `pg_dump`.
 
-### 6.3 — Where the ingestion pipeline runs
+### 6.3 — Where the ingestion pipeline runs ✅ **decided and wired up (2026-08-08)**
 
-The enrichment pipeline currently runs as three launchd agents on a personal
-Mac (`launchd/*.plist`), which stops working the moment the database moves.
-Two options, and the cheap one is fine for a long time:
+**Keep it local, pointed at the production database** — the enrichment
+pipeline still runs as three launchd agents on a personal Mac
+(`launchd/*.plist`), but as of the Render/Neon deploy, all three wrapper
+scripts (`scripts/run_enrich_names.sh`, `run_publications_daily.sh`,
+`run_topics.sh`) source a gitignored `.env.production` file (if present)
+before running, which sets `DATABASE_URL` to the Neon connection string.
+Enrichment now writes straight to production, so there's no separate local
+copy of `Institution`/`Professor`/`Publication`/`ResearchTopic` data that
+needs a manual `pg_dump`/restore to sync — that was the actual motivating
+problem (Neon's snapshot going stale the moment daily enrichment keeps
+running locally). Deliberately **not** the shared root `.env` — that one
+still controls local dev/`uvicorn`/tests, which should keep defaulting to
+local Postgres unless someone opts in explicitly. Zero new infrastructure,
+preserves the rate-limit circuit breakers and daily-resume scheduling
+already tuned in those plists; the known downside is unchanged — it only
+runs when that Mac is on. **To set up:** create `.env.production` at the
+repo root containing one line, `DATABASE_URL=<Neon connection string>`.
 
-- **Keep it local, pointed at the production database** via `DATABASE_URL`.
-  Zero new infrastructure, and it preserves the rate-limit circuit breakers
-  and daily-resume scheduling already tuned in those plists. Downside: it
-  only runs when that machine is on.
-- **Move to platform cron** (Render cron jobs, Fly scheduled machines, or
-  GitHub Actions on a schedule) once that becomes annoying — the scripts are
-  already independent module entry points, so this is a scheduling change,
-  not a rewrite.
-
-Either way, add per-stage logging so a partial failure is visible rather than
-silent.
+**Still available if the "only runs when the Mac is on" downside becomes a
+real problem:** move to platform cron (Render cron jobs, Fly scheduled
+machines, or GitHub Actions on a schedule) — the scripts are already
+independent module entry points, so this would be a scheduling change, not
+a rewrite.
 
 ### 6.4 — Guardrails before real users
 
