@@ -239,6 +239,21 @@ def get_all_professors():
     return professors
 
 def get_professors_with_orcid():
+    # Ordered so a professor never yet checked (name_checked_at IS NULL)
+    # always comes before one already checked, and among already-checked
+    # professors the longest-stale one comes first. Unlike
+    # get_professors_without_topics()/get_professors_without_publications(),
+    # this can't just skip already-done professors -- enrich_names.py is a
+    # recurring verification pass, not a one-time backfill, so everyone
+    # needs to be revisited eventually. But with no ordering at all, an
+    # interrupted run (this pipeline has no consecutive-failure circuit
+    # breaker the way topics.py/publications.py do) restarted from scratch
+    # every time, in whatever arbitrary order Postgres happened to return,
+    # with no guarantee it ever reached everyone. This ordering means a
+    # partial run still makes real forward progress: whoever it reaches
+    # becomes the most-recently-checked, so the next run picks up with
+    # whoever's next in line rather than re-starting at the same front of
+    # the list.
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
@@ -246,6 +261,7 @@ def get_professors_with_orcid():
     FROM Professor
     JOIN Institution ON Institution.id = Professor.institution_id
     WHERE Professor.orcid IS NOT NULL
+    ORDER BY Professor.name_checked_at ASC NULLS FIRST
     '''
     cursor.execute(query)
     professors = cursor.fetchall()
