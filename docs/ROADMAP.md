@@ -1,20 +1,21 @@
 # Research Finder — Roadmap
 
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-10
 
-> **Next up: Phase 6.5** (trust/legal). The app — renamed from "Research Lab
+> **Next up: Phase 6.6** (monitoring). The app — renamed from "Research Lab
 > Finder" to "Research Finder" on 2026-08-08 — is live at
 > `https://research-finder.com` on Render + Neon, with Google OAuth, Resend
-> email delivery, and every LLM endpoint now capped/rate-limited (Phases
-> 6.1–6.4 all done as of 2026-08-09). What's left before opening this up to
-> real users is 6.5 (privacy policy, data provenance statement, a
-> correction/removal contact path), then 6.6 (monitoring). This was
-> **promoted ahead of Phase 4 on 2026-08-08 at the user's direction**: the
-> app should reach other users before more content (labs) is added. See
-> "Suggested order" for the full reasoning. Phase numbers are deliberately
-> *not* renumbered: several code comments (`src/ingestion/openalex.py`,
-> migration headers) already cite phase numbers, and silently shifting them
-> would make those comments point at the wrong thing.
+> email delivery, every LLM endpoint capped/rate-limited (Phases 6.1–6.4,
+> done 2026-08-09), and a privacy policy, terms, data-provenance page, and
+> working contact path (Phase 6.5, done 2026-08-10). What's left before this
+> is genuinely ready for real users is 6.6: error reporting, an uptime
+> check, and CI running the test suite on push. This was **promoted ahead of
+> Phase 4 on 2026-08-08 at the user's direction**: the app should reach
+> other users before more content (labs) is added. See "Suggested order"
+> for the full reasoning. Phase numbers are deliberately *not* renumbered:
+> several code comments (`src/ingestion/openalex.py`, migration headers)
+> already cite phase numbers, and silently shifting them would make those
+> comments point at the wrong thing.
 
 ## The goal
 
@@ -87,13 +88,13 @@ correctness.
    other people can reach it.
 6. **No opportunity signal.** Nothing records whether a PI or program actually
    takes students, which is the fact a student most needs. (Phase 5B.)
-7. ~~**Nobody outside this machine can use it.**~~ **Fixed in Phase 6.1–6.4**
-   (2026-08-08/09). Live at `https://research-finder.com` on Render + Neon,
-   with working Google/password sign-in, real email delivery, and every LLM
-   endpoint guarded against runaway cost/abuse. What's left before this is
-   genuinely ready for strangers to use is Phase 6.5 (privacy policy, data
-   provenance, a correction/removal contact path) — see the top of this
-   file.
+7. ~~**Nobody outside this machine can use it.**~~ **Fixed in Phase 6.1–6.5**
+   (2026-08-08/10). Live at `https://research-finder.com` on Render + Neon,
+   with working Google/password sign-in, real email delivery, every LLM
+   endpoint guarded against runaway cost/abuse, a privacy policy/terms/data-
+   provenance page, and a working contact path. What's left before this is
+   genuinely ready for strangers to use is Phase 6.6 (monitoring) — see the
+   top of this file.
 
 ---
 
@@ -611,19 +612,33 @@ upload, uncached, same as email drafting.
   already required from Phase 5A, the daily cap landed above, and there has
   never been a "send for me" button. Keep it that way — don't add one.
 
-### 6.5 — Trust, and the fact that this app is about real people
+### 6.5 — Trust, and the fact that this app is about real people ✅ **done (2026-08-10)**
 
 Every row is a real named academic who did not sign up for this. The data is
 public and properly attributed, but shipping to strangers raises obligations
 that a localhost prototype doesn't have.
 
-- **Privacy policy and terms**, covering what's stored for accounts and what
-  the AI features do with a student's profile text.
-- **State the data provenance on-site** — OpenAlex and ORCID, both public —
-  and label AI-generated text as generated, per the principle below.
-- **A working contact path for correction or removal requests** from a
-  professor who asks. Small, but it's the difference between a defensible
-  project and an awkward email you have no process for.
+- ✅ **Privacy policy and terms** (`#/privacy`, `#/terms`, `frontend/views/
+  legal.js`), covering what's stored for accounts, and — the part that
+  actually needed writing carefully — what the AI features (summaries,
+  cold-email drafts, resume import) send to the outside model provider,
+  including that a student's profile text and resume are part of that
+  payload.
+- ✅ **Data provenance stated on-site** (`#/about`, same file): OpenAlex and
+  ORCID as sources (both public), the attribution method that avoids the
+  original misattribution bug, and that AI-generated text is always labeled
+  as such — per the principle below.
+- ✅ **A working contact path for correction or removal requests.** Two
+  paths now exist side by side: the existing per-professor "Flag an issue"
+  button (`backend/flags.py`, already live from earlier work) for anything
+  tied to one Professor row, and a new general contact form (`#/contact`,
+  `POST /api/contact`, `backend/contact.py`) for anything else — a
+  professor asking to be removed entirely, or a privacy question. Both
+  email `ADMIN_EMAIL` through the existing `send_email()` seam
+  (`backend/email.py`); the contact form is IP-rate-limited (5/hour, same
+  `backend/rate_limit.py` used by auth) since, unlike a flag, it has no
+  account and no per-email limit worth enforcing. All four pages are linked
+  from a new site footer (`frontend/index.html`).
 
 ### 6.6 — Knowing when it breaks
 
@@ -676,17 +691,20 @@ user telling you.
    local ingestion pointed at production, and every LLM endpoint is now
    capped/rate-limited (auth endpoints by IP+email, cold-email/resume
    import by a daily per-user cap, plus a $20/month OpenAI spend alert as
-   an early-warning tripwire on top of those). **Next up: 6.5**
-   (trust/legal — privacy policy, data provenance statement, a contact path
-   for correction/removal requests) before opening this up to real users,
-   then 6.6 (monitoring) and 6.7 is just a cost writeup, not an action item.
-8. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
+   an early-warning tripwire on top of those).
+8. ~~**Phase 6.5**~~ — done 2026-08-10 (trust/legal): privacy policy, terms,
+   an on-site data-provenance page, and a contact path for correction/
+   removal requests alongside the existing per-professor flag feature.
+   **Next up: 6.6** (monitoring — error reporting, an uptime check, CI
+   running the test suite on push) before opening this up to real users;
+   6.7 is just a cost writeup, not an action item.
+9. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
    until the app is somewhere other people can reach it; this was the
    original point of promoting Phase 6.
-9. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
-   structured-program audience turns out to matter more than lab coverage
-   once there's real usage to look at).
-10. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
+10. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
+    structured-program audience turns out to matter more than lab coverage
+    once there's real usage to look at).
+11. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
     should keep following 5A/6 rather than precede them.
 
 ## Principles carried forward
