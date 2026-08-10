@@ -74,3 +74,9 @@ services:
       #   Research Finder <noreply@research-finder.com>
       - key: EMAIL_FROM
         sync: false
+      # backend/error_reporting.py (Phase 6.6): a project DSN from sentry.io
+      # (free tier). Optional -- error capture is simply off if unset, same
+      # "optional feature degrades gracefully" pattern as the other
+      # sync: false entries above.
+      - key: SENTRY_DSN
+        sync: false

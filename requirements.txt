@@ -31,3 +31,4 @@ email-validator==2.3.0
 openai==2.53.0
 pypdf==6.15.0
 python-multipart==0.0.32
+sentry-sdk==2.67.1
