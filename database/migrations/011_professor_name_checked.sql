@@ -1,0 +1,12 @@
+-- Tracks per-professor progress of src/ingestion/enrich_names.py, which
+-- (unlike topics.py/publications.py) has no skip logic -- it re-verifies
+-- every professor with an ORCID id on every run, so there's no existing
+-- "has this professor been through it yet" signal the way ProfessorTopic/
+-- ProfessorPublication rows already give topics/publications. name_checked_at
+-- is set the first time (and updated on every later time) a professor is
+-- processed by enrich_all_professor_names(), so the admin dashboard's
+-- Pipeline progress section can show enrichment coverage the same way it
+-- shows topics/publications coverage. Nullable, not a boolean, so it also
+-- records *when* for free -- same "absent beats wrong" convention as
+-- ProfessorFlag.resolved_at and Professor.ai_summary.
+ALTER TABLE Professor ADD COLUMN IF NOT EXISTS name_checked_at TIMESTAMP;

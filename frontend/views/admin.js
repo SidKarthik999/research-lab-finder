@@ -25,6 +25,33 @@ function pct(part, total) {
   return `${Math.round((part / total) * 100)}%`;
 }
 
+// part/total as a 0-100 number, for a progress bar's width -- separate from
+// pct() above, which returns the "NN%" *string* used in stat-card hints.
+function pctValue(part, total) {
+  if (!total) return 0;
+  return Math.min(100, Math.round((part / total) * 100));
+}
+
+function progressBar(label, part, total, hint) {
+  const percent = pctValue(part, total);
+  return el(
+    "div",
+    { class: "progress-row" },
+    el(
+      "div",
+      { class: "progress-row-label" },
+      el("span", {}, label),
+      el("span", {}, `${percent}%`)
+    ),
+    el(
+      "div",
+      { class: "progress-bar" },
+      el("div", { class: "progress-bar-fill", style: `width: ${percent}%` })
+    ),
+    hint ? el("p", { class: "hint" }, hint) : null
+  );
+}
+
 function sparkline(daily) {
   const max = Math.max(1, ...daily.map((d) => d.count));
   return el(
@@ -157,6 +184,38 @@ function renderMetrics(metrics) {
           pct(data_coverage.professors_with_ai_summary, data_coverage.professors),
           `${data_coverage.professors_with_ai_summary} professors`
         )
+      )
+    ),
+    el(
+      "div",
+      { class: "card" },
+      el("h2", {}, "Pipeline progress"),
+      el(
+        "p",
+        { class: "hint" },
+        "How far the background ingestion jobs (src/ingestion/topics.py, publications.py, enrich_names.py) have gotten through the current professor catalog."
+      ),
+      progressBar(
+        "Topics",
+        data_coverage.professors_with_topics,
+        data_coverage.professors,
+        `${data_coverage.professors_with_topics} of ${data_coverage.professors} professors have at least one research topic`
+      ),
+      progressBar(
+        "Publications",
+        data_coverage.professors_with_publications,
+        data_coverage.professors,
+        `${data_coverage.professors_with_publications} of ${data_coverage.professors} professors have at least one linked publication`
+      ),
+      progressBar(
+        "Professor enrichment",
+        data_coverage.professors_with_name_checked,
+        data_coverage.professors,
+        // Unlike Topics/Publications, enrich_names.py has no skip logic --
+        // it re-verifies every professor with an ORCID on every run, so
+        // this is "has been through at least one name/ORCID verification
+        // pass", not "still has a backlog to clear" the same way.
+        `${data_coverage.professors_with_name_checked} of ${data_coverage.professors} professors have been through name/ORCID verification`
       )
     )
   );

@@ -304,6 +304,18 @@ def clear_professor_orcid(professor_id):
     connection.commit()
     cursor.close()
 
+def mark_professor_name_checked(professor_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE Professor
+    SET name_checked_at = CURRENT_TIMESTAMP
+    WHERE id = %s;
+    '''
+    cursor.execute(query, (professor_id,))
+    connection.commit()
+    cursor.close()
+
 def get_professors_for_publication_ingestion():
     connection = get_connection()
     cursor = connection.cursor()
@@ -1093,11 +1105,12 @@ def get_data_coverage_metrics():
             COUNT(*) FILTER (WHERE EXISTS (
                 SELECT 1 FROM ProfessorPublication WHERE ProfessorPublication.professor_id = Professor.id
             )) AS with_publications,
-            COUNT(*) FILTER (WHERE Professor.ai_summary IS NOT NULL) AS with_ai_summary
+            COUNT(*) FILTER (WHERE Professor.ai_summary IS NOT NULL) AS with_ai_summary,
+            COUNT(*) FILTER (WHERE Professor.name_checked_at IS NOT NULL) AS with_name_checked
         FROM Professor;
         '''
     )
-    total, with_orcid, with_email, with_topics, with_publications, with_ai_summary = cursor.fetchone()
+    total, with_orcid, with_email, with_topics, with_publications, with_ai_summary, with_name_checked = cursor.fetchone()
     cursor.close()
     return {
         "institutions": institutions,
@@ -1112,4 +1125,10 @@ def get_data_coverage_metrics():
         # this reads as "how much of the catalog has one so far", not
         # "how many were generated recently" the way cold-email usage does.
         "professors_with_ai_summary": with_ai_summary,
+        # enrich_names.py has no skip logic (unlike topics.py/publications.py)
+        # -- it re-verifies every professor with an ORCID on every run, so
+        # this isn't "still needs enrichment" in the same backlog sense.
+        # It's "has been through at least one verification pass", which is
+        # what src.ingestion.enrich_names.mark_professor_name_checked sets.
+        "professors_with_name_checked": with_name_checked,
     }

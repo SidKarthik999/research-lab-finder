@@ -30,6 +30,7 @@ from src.database import (
     clear_professor_orcid,
     close_connection,
     get_professors_with_orcid,
+    mark_professor_name_checked,
     update_professor_name,
 )
 from src.ingestion.openalex import INITIAL_TOKEN
@@ -199,12 +200,13 @@ def enrich_all_professor_names():
                 clear_professor_orcid(professor_id)
                 print(f"Cleared mismatched ORCID for {current_name} ({institution_name})")
                 cleared += 1
-                continue
+            else:
+                new_name = enrich_professor_name(professor_id, current_name, orcid)
+                if new_name:
+                    print(f"{current_name} -> {new_name}")
+                    updated += 1
 
-            new_name = enrich_professor_name(professor_id, current_name, orcid)
-            if new_name:
-                print(f"{current_name} -> {new_name}")
-                updated += 1
+            mark_professor_name_checked(professor_id)
         except Exception as e:
             print(f"Failed {current_name}: {e}")
 
