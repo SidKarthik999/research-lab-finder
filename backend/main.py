@@ -912,15 +912,5 @@ def healthz():
     return {"status": "ok"}
 
 
-# TEMPORARY -- verifies Sentry actually captures a real unhandled exception
-# from an HTTP request in production (FastAPI auto-instrumentation +
-# scrub_event() together, not just a standalone script -- see
-# docs/ROADMAP.md Phase 6.6). Delete this route once that's confirmed in
-# the Sentry dashboard.
-@app.get("/api/_debug-sentry")
-def debug_sentry():
-    raise RuntimeError("Deliberate test error to verify Sentry -- Phase 6.6, remove after confirming.")
-
-
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

@@ -644,7 +644,7 @@ that a localhost prototype doesn't have.
 
 ### 6.6 — Knowing when it breaks
 
-- ✅ **Error reporting, code side done (2026-08-10).** `backend/
+- ✅ **Error reporting -- done and verified live (2026-08-10).** `backend/
   error_reporting.py`'s `init_sentry()` wires up Sentry's Python SDK, called
   once before the `FastAPI()` app object is constructed so its Starlette/
   FastAPI auto-instrumentation (enabled automatically once `sentry-sdk`
@@ -659,10 +659,12 @@ that a localhost prototype doesn't have.
   `Cookie` header from an event's request context regardless, so the
   guarantee doesn't depend on `send_default_pii` never getting flipped on
   later. `traces_sample_rate=0` -- error capture only, no performance
-  tracing, comfortably inside the free tier regardless of traffic. **Still
-  open:** create the actual Sentry account/project and set `SENTRY_DSN` in
-  Render's environment tab (`render.yaml` already has the `sync: false`
-  slot) -- that's a real account, not something committed code can do.
+  tracing, comfortably inside the free tier regardless of traffic. Sentry
+  project created, `SENTRY_DSN` set in Render, and verified two ways: a
+  standalone script capture (confirms the DSN/network path) and a real
+  request against a deliberately-raising route hit live in production
+  (confirms the FastAPI auto-instrumentation path too) -- both showed up in
+  the Sentry dashboard. The route was temporary and has been removed.
 - An uptime check against `/healthz`.
 - CI running `python -m pytest` on push. The suite is already meaningful and
   is worth having gate a deploy.
