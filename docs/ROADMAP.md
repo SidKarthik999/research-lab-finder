@@ -7,9 +7,11 @@
 > `https://research-finder.com` on Render + Neon, with Google OAuth, Resend
 > email delivery, every LLM endpoint capped/rate-limited (Phases 6.1–6.4,
 > done 2026-08-09), and a privacy policy, terms, data-provenance page, and
-> working contact path (Phase 6.5, done 2026-08-10). What's left before this
-> is genuinely ready for real users is 6.6: error reporting, an uptime
-> check, and CI running the test suite on push. This was **promoted ahead of
+> working contact path (Phase 6.5, done 2026-08-10). Phase 6.6 (monitoring)
+> is in progress: Sentry error reporting is wired up in code (just needs a
+> real `SENTRY_DSN` in Render). What's left before this is genuinely ready
+> for real users is setting that DSN, plus an uptime check and CI running
+> the test suite on push. This was **promoted ahead of
 > Phase 4 on 2026-08-08 at the user's direction**: the app should reach
 > other users before more content (labs) is added. See "Suggested order"
 > for the full reasoning. Phase numbers are deliberately *not* renumbered:
@@ -642,8 +644,25 @@ that a localhost prototype doesn't have.
 
 ### 6.6 — Knowing when it breaks
 
-- Error reporting (Sentry's free tier is sufficient) so failures surface
-  without reading logs.
+- ✅ **Error reporting, code side done (2026-08-10).** `backend/
+  error_reporting.py`'s `init_sentry()` wires up Sentry's Python SDK, called
+  once before the `FastAPI()` app object is constructed so its Starlette/
+  FastAPI auto-instrumentation (enabled automatically once `sentry-sdk`
+  detects those packages -- no explicit `integrations=[...]` needed) can
+  patch what it needs to. No-ops when `SENTRY_DSN` is unset, same
+  "optional feature degrades gracefully" pattern as `OPENAI_API_KEY`/
+  `RESEND_API_KEY` -- dev and tests never talk to Sentry. `send_default_pii`
+  stays at the SDK's own `False` default (this app handles real personal
+  data -- student profile text, resumes, session cookies -- and an error
+  report is the last place that should end up), and `scrub_event()` is a
+  second, tested layer on top of that: it strips any `Authorization`/
+  `Cookie` header from an event's request context regardless, so the
+  guarantee doesn't depend on `send_default_pii` never getting flipped on
+  later. `traces_sample_rate=0` -- error capture only, no performance
+  tracing, comfortably inside the free tier regardless of traffic. **Still
+  open:** create the actual Sentry account/project and set `SENTRY_DSN` in
+  Render's environment tab (`render.yaml` already has the `sync: false`
+  slot) -- that's a real account, not something committed code can do.
 - An uptime check against `/healthz`.
 - CI running `python -m pytest` on push. The suite is already meaningful and
   is worth having gate a deploy.

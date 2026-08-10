@@ -40,6 +40,7 @@ from backend.admin import ADMIN_EMAIL, require_admin
 from backend.auth import APP_BASE_URL, router as auth_router
 from backend.contact import build_contact_notification_email
 from backend.email import send_email
+from backend.error_reporting import init_sentry
 from backend.flags import FLAG_REASONS, build_flag_notification_email, valid_reason_ids
 from backend.rate_limit import check_rate_limit
 from backend.institution_types import (
@@ -74,6 +75,13 @@ async def lifespan(app: FastAPI):
     yield
     db.close_pool()
 
+
+# Before the FastAPI() app object is created, so Sentry's Starlette/FastAPI
+# auto-instrumentation (enabled automatically when sentry-sdk detects those
+# packages installed -- no explicit integrations=[...] needed) actually
+# patches the classes it needs to. No-ops when SENTRY_DSN is unset -- see
+# backend/error_reporting.py.
+init_sentry()
 
 app = FastAPI(title="Research Finder API", lifespan=lifespan)
 
