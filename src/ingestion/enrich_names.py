@@ -27,9 +27,12 @@ Run from the repo root: python -m src.ingestion.enrich_names
 import re
 
 from src.database import (
+    backoff_sleep,
     clear_professor_orcid,
     close_connection,
     get_professors_with_orcid,
+    init_pool,
+    is_connection_error,
     mark_professor_name_checked,
     update_professor_name,
 )
@@ -192,6 +195,14 @@ def enrich_all_professor_names():
     professors = get_professors_with_orcid()
     updated = 0
     cleared = 0
+    # No consecutive-failure circuit breaker here, deliberately (see the
+    # module docstring's original reasoning: ORCID's API is free, so a
+    # wasted restart only costs time) -- but a real, repeated failure mode
+    # found 2026-08-10 is Neon's compute waking from autosuspend taking
+    # longer than the pool's connection timeout, and retrying that
+    # instantly forever never gives it room to actually finish waking. This
+    # counter is just for backoff pacing, not for giving up.
+    consecutive_connection_failures = 0
 
     for professor_id, current_name, orcid, institution_name, institution_country in professors:
         try:
@@ -207,13 +218,24 @@ def enrich_all_professor_names():
                     updated += 1
 
             mark_professor_name_checked(professor_id)
+            consecutive_connection_failures = 0
         except Exception as e:
             print(f"Failed {current_name}: {e}")
+            if is_connection_error(e):
+                consecutive_connection_failures += 1
+                backoff_sleep(consecutive_connection_failures)
+            else:
+                consecutive_connection_failures = 0
 
     return updated, cleared
 
 
 if __name__ == "__main__":
+    # A much larger pool timeout than the web app's default 30s -- see
+    # init_pool()'s docstring in src/database.py. Must run before the
+    # first get_connection() call (inside enrich_all_professor_names())
+    # lazily creates the pool with the default instead.
+    init_pool(timeout=90)
     updated, cleared = enrich_all_professor_names()
     print(f"Updated {updated} professor name(s), cleared {cleared} mismatched ORCID(s)")
     close_connection()

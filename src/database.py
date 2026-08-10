@@ -1,9 +1,11 @@
 import contextvars
 import functools
 import os
+import random
+import time
 
 import psycopg
-from psycopg.errors import UniqueViolation
+from psycopg.errors import OperationalError, UniqueViolation
 from psycopg_pool import ConnectionPool
 
 # DATABASE_URL is unset in local dev -- falls back to the same local
@@ -33,11 +35,20 @@ _pool = None
 _current_connection = contextvars.ContextVar("_current_connection", default=None)
 
 
-def init_pool():
+def init_pool(timeout=30):
     """Opens the pool. Called from backend/main.py's lifespan handler on
-    startup; ingestion scripts and tests never call this directly -- they
-    get a lazily-initialized pool from get_connection() below instead, since
-    they have no lifespan handler to call it for them."""
+    startup (with the default timeout -- a live HTTP request shouldn't
+    block for longer than that on a hung DB); ingestion scripts and tests
+    never call this directly in most cases, getting a lazily-initialized
+    pool from get_connection() below with the same default. `timeout` is
+    how long a caller waits for the pool to hand back a connection before
+    raising psycopg_pool.PoolTimeout -- enrich_names.py/publications.py/
+    topics.py explicitly call this with a much larger value before their
+    first get_connection(), since Neon's compute can legitimately take
+    longer than 30s to wake from autosuspend (a real, repeated cause of
+    "couldn't get a connection after 30.00 sec" failures found 2026-08-10),
+    and a background script has no live request waiting on it the way the
+    web app does."""
     global _pool
     if _pool is not None:
         return
@@ -48,6 +59,7 @@ def init_pool():
         min_size=1,
         max_size=10,
         check=ConnectionPool.check_connection,
+        timeout=timeout,
         open=False,
     )
     _pool.open()
@@ -60,6 +72,30 @@ def close_pool():
     if _pool is not None:
         _pool.close()
         _pool = None
+
+
+def is_connection_error(exc):
+    """True for a failure that's about *reaching* the database (pool
+    exhaustion, a connection timeout, a dropped/reset connection) rather
+    than about the data being read/written -- used by ingestion scripts to
+    decide whether a failure is worth backing off before the next attempt,
+    versus an isolated bad record that's fine to just skip and move on
+    from immediately. psycopg_pool.PoolTimeout (the "couldn't get a
+    connection" error) is a subclass of psycopg's own OperationalError, so
+    this one check also covers a plain dropped-connection network error."""
+    return isinstance(exc, OperationalError)
+
+
+def backoff_sleep(attempt, base=2, cap=60):
+    """Exponential backoff with jitter, capped at `cap` seconds. `attempt`
+    is the number of *consecutive* connection failures seen so far (reset
+    to 0 on any success) -- called by ingestion scripts between retries so
+    a Neon compute waking from autosuspend (which found 2026-08-10 can
+    take longer than the pool's own connection timeout) gets breathing
+    room to actually finish waking, instead of every failed attempt being
+    retried instantly forever."""
+    delay = min(cap, base * (2 ** (attempt - 1))) + random.uniform(0, 1)
+    time.sleep(delay)
 
 
 def get_connection():
