@@ -17,10 +17,13 @@ import pyalex
 
 import src.ingestion.openalex_client  # noqa: F401 -- import for its config/session-hardening side effects
 from src.database import (
+    backoff_sleep,
     close_connection,
     get_professors_without_publications,
+    init_pool,
     insert_professor_publication,
     insert_publication,
+    is_connection_error,
 )
 
 
@@ -86,6 +89,17 @@ def ingest_publications_for_professor(professor_id, openalex_author_id, limit=10
             insert_professor_publication(professor_id, publication_id)
             inserted += 1
         except Exception as e:
+            # A connection failure (pool exhaustion, Neon waking from
+            # autosuspend -- found 2026-08-10) is let through rather than
+            # swallowed here: ingest_all_publications()'s circuit breaker
+            # below only ever sees exceptions raised out of *this*
+            # function, so catching this one silently, the same as a
+            # genuinely bad OpenAlex record, made it invisible to that
+            # breaker -- a sustained outage could burn through the entire
+            # remaining professor list, one 90-second pool timeout at a
+            # time, with nothing ever tripping the "stop early" path.
+            if is_connection_error(e):
+                raise
             print(f"Failed {work.get('display_name')}: {e}")
 
     return inserted
@@ -129,6 +143,14 @@ def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
         except Exception as e:
             print(f"Failed {name}: {e}")
             consecutive_failures += 1
+            # A connection failure gets a backoff pause before the next
+            # attempt (see backoff_sleep()'s docstring) -- an OpenAlex
+            # budget failure doesn't, since there's no reason to believe
+            # waiting a few seconds changes whether today's budget is
+            # exhausted, and the circuit breaker below already handles
+            # that case by stopping outright.
+            if is_connection_error(e):
+                backoff_sleep(consecutive_failures)
             if consecutive_failures >= max_consecutive_failures:
                 print(
                     f"Stopping after {consecutive_failures} consecutive failures "
@@ -141,6 +163,12 @@ def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
 
 
 if __name__ == "__main__":
+    # A much larger pool timeout than the web app's default 30s -- see
+    # init_pool()'s docstring in src/database.py. Must run before the
+    # first get_connection() call (inside ingest_all_publications())
+    # lazily creates the pool with the default instead.
+    init_pool(timeout=90)
     total = ingest_all_publications()
     print(f"Inserted {total} publication(s)")
+    close_connection()
     close_connection()

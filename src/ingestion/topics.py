@@ -19,10 +19,13 @@ import pyalex
 
 import src.ingestion.openalex_client  # noqa: F401 -- import for its config/session-hardening side effects
 from src.database import (
+    backoff_sleep,
     close_connection,
     get_professors_without_topics,
+    init_pool,
     insert_professor_topic,
     insert_research_topic,
+    is_connection_error,
 )
 
 
@@ -71,6 +74,15 @@ def insert_topics_from_professors(professors, max_consecutive_failures=5):
         except Exception as e:
             print(f"Failed {name}: {e}")
             consecutive_failures += 1
+            # A connection failure (pool exhaustion, Neon waking from
+            # autosuspend -- found 2026-08-10) gets a backoff pause before
+            # the next attempt; see backoff_sleep()'s docstring. An
+            # OpenAlex budget failure doesn't -- waiting a few seconds
+            # doesn't change whether today's budget is exhausted, and the
+            # circuit breaker below already handles that case by stopping
+            # outright.
+            if is_connection_error(e):
+                backoff_sleep(consecutive_failures)
             if consecutive_failures >= max_consecutive_failures:
                 print(
                     f"Stopping after {consecutive_failures} consecutive failures "
@@ -83,6 +95,12 @@ def insert_topics_from_professors(professors, max_consecutive_failures=5):
 
 
 if __name__ == "__main__":
+    # A much larger pool timeout than the web app's default 30s -- see
+    # init_pool()'s docstring in src/database.py. Must run before the
+    # first get_connection() call (inside get_professors_without_topics()
+    # below) lazily creates the pool with the default instead.
+    init_pool(timeout=90)
+
     # get_professors_without_topics() skips anyone with an existing
     # ProfessorTopic row so a resumed/rerun call doesn't redo work -- these
     # are free single-record OpenAlex views (not paid filtered-list
