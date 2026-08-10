@@ -1,0 +1,39 @@
+# Runs the pytest suite on every push and pull request -- see
+# docs/ROADMAP.md Phase 6.6. render.yaml deploys `main` automatically
+# (autoDeploy: true) as soon as a PR merges, so this is what actually
+# stands between a broken change and a broken production deploy; nothing
+# else forces the suite to run before that happens.
+#
+# Plain pip, not conda: same reasoning as requirements.txt (a conda solve
+# is unnecessary weight here, and environment.yml's conda-level pins
+# include at least one macOS-only package that wouldn't resolve on this
+# Linux runner anyway) -- see requirements-dev.txt.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run test suite
+        env:
+          # tests/test_auth.py and tests/test_search_query.py import
+          # backend.main, which reads SESSION_SECRET at module import time
+          # with no default (see backend/main.py) -- a dummy value is fine
+          # here since the suite never starts a real server or issues a
+          # real session cookie.
+          SESSION_SECRET: ci-test-secret
+        run: python -m pytest

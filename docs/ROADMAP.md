@@ -2,16 +2,16 @@
 
 **Last updated:** 2026-08-10
 
-> **Next up: Phase 6.6** (monitoring). The app — renamed from "Research Lab
+> **Next up: Phase 4** (labs, automated). The app — renamed from "Research Lab
 > Finder" to "Research Finder" on 2026-08-08 — is live at
 > `https://research-finder.com` on Render + Neon, with Google OAuth, Resend
 > email delivery, every LLM endpoint capped/rate-limited (Phases 6.1–6.4,
 > done 2026-08-09), and a privacy policy, terms, data-provenance page, and
-> working contact path (Phase 6.5, done 2026-08-10). Phase 6.6 (monitoring)
-> is in progress: Sentry error reporting is wired up in code (just needs a
-> real `SENTRY_DSN` in Render). What's left before this is genuinely ready
-> for real users is setting that DSN, plus an uptime check and CI running
-> the test suite on push. This was **promoted ahead of
+> working contact path (Phase 6.5, done 2026-08-10). Phase 6.6 (monitoring):
+> Sentry error reporting is wired up and verified live, and CI now runs the
+> test suite on every push (both done 2026-08-10). An uptime check against
+> `/healthz` is deliberately deferred until there's enough real traffic for
+> it to matter. This was **promoted ahead of
 > Phase 4 on 2026-08-08 at the user's direction**: the app should reach
 > other users before more content (labs) is added. See "Suggested order"
 > for the full reasoning. Phase numbers are deliberately *not* renumbered:
@@ -90,13 +90,14 @@ correctness.
    other people can reach it.
 6. **No opportunity signal.** Nothing records whether a PI or program actually
    takes students, which is the fact a student most needs. (Phase 5B.)
-7. ~~**Nobody outside this machine can use it.**~~ **Fixed in Phase 6.1–6.5**
+7. ~~**Nobody outside this machine can use it.**~~ **Fixed in Phase 6.1–6.6**
    (2026-08-08/10). Live at `https://research-finder.com` on Render + Neon,
    with working Google/password sign-in, real email delivery, every LLM
    endpoint guarded against runaway cost/abuse, a privacy policy/terms/data-
-   provenance page, and a working contact path. What's left before this is
-   genuinely ready for strangers to use is Phase 6.6 (monitoring) — see the
-   top of this file.
+   provenance page, a working contact path, verified Sentry error
+   reporting, and CI running the test suite on every push. The one
+   deliberately-deferred piece (an uptime check) is a "come back once
+   there are real users" item, not a blocker — see the top of this file.
 
 ---
 
@@ -665,9 +666,28 @@ that a localhost prototype doesn't have.
   request against a deliberately-raising route hit live in production
   (confirms the FastAPI auto-instrumentation path too) -- both showed up in
   the Sentry dashboard. The route was temporary and has been removed.
-- An uptime check against `/healthz`.
-- CI running `python -m pytest` on push. The suite is already meaningful and
-  is worth having gate a deploy.
+- An uptime check against `/healthz`. **Deliberately skipped for now** --
+  not enough real users yet for "the site went down" to need an automated
+  page; revisit once there's real traffic to protect.
+- ✅ **CI running `python -m pytest` on push (2026-08-10).**
+  `.github/workflows/ci.yml` runs the full suite on every push/PR against
+  `main`. `render.yaml` has `autoDeploy: true`, so a merge to `main`
+  deploys straight to production with nothing else forcing the suite to
+  run first -- this is what actually closes that gap, rather than relying
+  on remembering to run `pytest` locally before merging. Plain pip, not
+  conda: a conda solve is unnecessary weight for CI (same reasoning as
+  `requirements.txt` for the Docker image), and `environment.yml`'s
+  conda-level pins include at least one macOS-only package (`libcxx`)
+  that wouldn't resolve on the Linux runner anyway. New
+  `requirements-dev.txt` layers `pytest`/`pyalex`/`openpyxl` on top of
+  `requirements.txt` -- the first is dev/CI-only by design (see
+  `requirements.txt`'s own comment), the latter two are conda-env pip
+  dependencies for the local ingestion pipeline that several *tests*
+  still import (`tests/test_openalex.py`, `tests/test_carnegie.py`) even
+  though production code never touches them. Verified by running the
+  suite in a throwaway plain-`venv` (not conda) locally first, to catch
+  exactly this kind of missing-dependency gap before trusting the actual
+  CI run.
 
 ### 6.7 — Rough running cost
 
@@ -716,16 +736,18 @@ user telling you.
 8. ~~**Phase 6.5**~~ — done 2026-08-10 (trust/legal): privacy policy, terms,
    an on-site data-provenance page, and a contact path for correction/
    removal requests alongside the existing per-professor flag feature.
-   **Next up: 6.6** (monitoring — error reporting, an uptime check, CI
-   running the test suite on push) before opening this up to real users;
-   6.7 is just a cost writeup, not an action item.
-9. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
-   until the app is somewhere other people can reach it; this was the
-   original point of promoting Phase 6.
-10. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
+9. ~~**Phase 6.6**~~ — done 2026-08-10 (monitoring): Sentry error reporting
+   wired up and verified live in production, and CI running the test
+   suite on every push. The uptime check is deliberately deferred until
+   there's enough real traffic for it to matter; 6.7 is just a cost
+   writeup, not an action item. **Next up: Phase 4** (labs, automated).
+10. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
+    until the app is somewhere other people can reach it; this was the
+    original point of promoting Phase 6.
+11. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
     structured-program audience turns out to matter more than lab coverage
     once there's real usage to look at).
-11. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
+12. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
     should keep following 5A/6 rather than precede them.
 
 ## Principles carried forward
