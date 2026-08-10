@@ -1,0 +1,19 @@
+# On top of requirements.txt: what's needed to run `python -m pytest`
+# without a full conda env. requirements.txt deliberately excludes pytest
+# (dev/CI only, never imported by the running app -- see its own header),
+# and pyalex/openpyxl are conda-env pip dependencies used only by the local
+# ingestion pipeline (src/ingestion/openalex.py, src/ingestion/carnegie.py)
+# -- but several tests import those modules (e.g. tests/test_openalex.py,
+# tests/test_carnegie.py), so they're needed for the *test* import chain
+# even though production (backend/main.py) never touches them.
+#
+# Used by .github/workflows/ci.yml. Not conda, on purpose: CI (like the
+# Docker image, see requirements.txt's own comment) doesn't need
+# environment.yml's full conda solve -- every one of these ships a
+# prebuilt wheel, and environment.yml's conda-level pins include at least
+# one macOS-only package (libcxx), which wouldn't resolve on a Linux
+# runner anyway.
+-r requirements.txt
+pytest==9.1.1
+pyalex==0.21
+openpyxl==3.1.5
