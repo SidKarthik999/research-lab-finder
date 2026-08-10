@@ -30,16 +30,18 @@ from dotenv import load_dotenv
 # already have latched onto "unset" before load_dotenv() ever ran.
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import ForeignKeyViolation
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.admin import ADMIN_EMAIL, require_admin
 from backend.auth import APP_BASE_URL, router as auth_router
+from backend.contact import build_contact_notification_email
 from backend.email import send_email
 from backend.flags import FLAG_REASONS, build_flag_notification_email, valid_reason_ids
+from backend.rate_limit import check_rate_limit
 from backend.institution_types import (
     INSTITUTION_TYPES,
     institution_type_for_classification,
@@ -596,6 +598,42 @@ def flag_professor(professor_id: int, payload: ProfessorFlagRequest, user=Depend
         send_email(ADMIN_EMAIL, subject, body)
 
     return {"flagged": True}
+
+
+# General contact form (privacy questions, correction/removal requests that
+# aren't tied to one Professor row -- see backend/contact.py and
+# docs/ROADMAP.md Phase 6.5). No account required. Rate-limited by IP only
+# (not by a submitted email like signup/forgot -- there's no address here
+# worth protecting from repeat mail, only ADMIN_EMAIL's inbox from spam).
+CONTACT_IP_LIMIT = (5, 60 * 60)
+
+
+class ContactRequest(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    message: str
+
+
+@app.post("/api/contact")
+def submit_contact(body: ContactRequest, request: Request):
+    ip = request.client.host if request.client else "unknown"
+    limit, window = CONTACT_IP_LIMIT
+    if not check_rate_limit(f"contact:ip:{ip}", limit, window):
+        raise HTTPException(status_code=429, detail="Too many messages. Please try again later.")
+
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message can't be empty.")
+
+    if not ADMIN_EMAIL:
+        # Unlike a flag (still saved to the DB even if the notification
+        # email can't be sent), a contact message has nowhere else to go --
+        # raise rather than silently discarding it.
+        raise HTTPException(status_code=503, detail="The contact form isn't configured yet.")
+
+    subject, email_body = build_contact_notification_email(body.name, body.email, message, APP_BASE_URL)
+    send_email(ADMIN_EMAIL, subject, email_body)
+    return {"sent": True}
 
 
 @app.get("/api/admin/flags")

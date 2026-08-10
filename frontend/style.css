@@ -1411,3 +1411,52 @@ button.publication-title:hover {
 .admin-table tbody tr:hover {
   background: var(--surface-2);
 }
+
+/* --- Footer (About/Privacy/Terms/Contact) --- */
+
+.site-footer {
+  max-width: none;
+  margin-top: var(--space-6);
+  padding: var(--space-5) max(var(--space-5), calc((100% - 880px) / 2));
+  border-top: 1px solid var(--border);
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.site-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: var(--accent);
+}
+
+/* --- Legal/static content pages (About, Privacy, Terms) --- */
+
+.legal-page .card {
+  margin-bottom: var(--space-4);
+}
+
+.legal-page .card p {
+  margin: 0 0 var(--space-2);
+}
+
+.legal-page .card p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-page .card ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.legal-page .card li + li {
+  margin-top: var(--space-1);
+}

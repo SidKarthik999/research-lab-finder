@@ -121,6 +121,10 @@ export function flagProfessor(id, { reasons, details }) {
   return request(`/api/professors/${id}/flag`, { method: "POST", body: { reasons, details } });
 }
 
+export function submitContact({ name, email, message }) {
+  return request("/api/contact", { method: "POST", body: { name, email, message } });
+}
+
 export function bookmarkProfessor(id) {
   return request(`/api/professors/${id}/bookmark`, { method: "POST" });
 }

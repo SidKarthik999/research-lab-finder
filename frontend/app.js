@@ -19,6 +19,8 @@ import {
 import { renderProfileView } from "./views/profile.js";
 import { renderBookmarksView } from "./views/bookmarks.js";
 import { renderAdminView } from "./views/admin.js";
+import { renderAboutView, renderPrivacyView, renderTermsView } from "./views/legal.js";
+import { renderContactView } from "./views/contact.js";
 
 const accountNavEl = document.getElementById("account-nav");
 const appEl = document.getElementById("app");
@@ -107,6 +109,10 @@ registerRoute("/verify-email", renderVerifyEmailView);
 registerRoute("/profile", renderProfileView);
 registerRoute("/bookmarks", renderBookmarksView);
 registerRoute("/admin", renderAdminView);
+registerRoute("/privacy", renderPrivacyView);
+registerRoute("/terms", renderTermsView);
+registerRoute("/about", renderAboutView);
+registerRoute("/contact", renderContactView);
 
 // Registered before initSession() runs, so its internal notify() call
 // already covers the first render -- no separate initial call needed.
