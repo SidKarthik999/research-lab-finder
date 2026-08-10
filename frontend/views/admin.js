@@ -7,7 +7,7 @@
 // what this page does.
 
 import { el, mount } from "../dom.js";
-import { ApiError, deleteAdminFlag, getAdminFlags, getAdminMetrics } from "../api.js";
+import { ApiError, deleteAdminFlag, getAdminFlags, getAdminMetrics, setAdminFlagResolved } from "../api.js";
 import { getCurrentUser } from "../session.js";
 
 function statCard(label, value, hint) {
@@ -162,12 +162,46 @@ function renderMetrics(metrics) {
   );
 }
 
+const CHECK_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+const REOPEN_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
+const TRASH_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+
+function iconButton(html, label, extraClass) {
+  return el(
+    "button",
+    { type: "button", class: `ghost icon-button ${extraClass || ""}`, "aria-label": label, title: label },
+    // Same "html" escape hatch as the search button's icon in
+    // frontend/views/search.js -- fixed, trusted SVG strings, never
+    // user-controlled data.
+    el("span", { class: "btn-icon", html })
+  );
+}
+
+// Open reports first, most recent within each group next -- mirrors
+// get_recent_flags()'s ORDER BY in src/database.py, so toggling a flag's
+// resolved state client-side (no full dashboard refetch, same as delete)
+// re-sorts consistently with what a fresh page load would show.
+function sortFlags(list) {
+  return [...list].sort((a, b) => {
+    const aOpen = a.resolved_at ? 1 : 0;
+    const bOpen = b.resolved_at ? 1 : 0;
+    if (aOpen !== bOpen) return aOpen - bOpen;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+}
+
 // Stateful (unlike the pure statCard/sparkline/renderMetrics helpers above)
-// because deleting a flag needs to update what's on screen without
-// re-fetching the whole dashboard -- same shape as renderBookmarkList in
-// frontend/views/bookmarks.js, including no confirm() prompt before
-// deleting, consistent with that same "Remove bookmark" button.
+// because deleting/resolving a flag needs to update what's on screen
+// without re-fetching the whole dashboard -- same shape as
+// renderBookmarkList in frontend/views/bookmarks.js, including no
+// confirm() prompt before deleting, consistent with that same "Remove
+// bookmark" button.
 function renderFlagsSection(container, flags) {
+  flags = sortFlags(flags);
+
   function render() {
     if (flags.length === 0) {
       mount(container, el("p", { class: "empty-state" }, "No flags reported yet."));
@@ -193,6 +227,7 @@ function renderFlagsSection(container, flags) {
               el("th", {}, "Details"),
               el("th", {}, "Reported by"),
               el("th", {}, "When"),
+              el("th", {}, "Status"),
               el("th", {})
             )
           ),
@@ -203,17 +238,23 @@ function renderFlagsSection(container, flags) {
   }
 
   function renderRow(flag) {
-    const deleteBtn = el(
-      "button",
-      { type: "button", class: "ghost icon-button", "aria-label": "Delete this flag", title: "Delete" },
-      // Same "html" escape hatch as the search button's icon in
-      // frontend/views/search.js -- a fixed, trusted SVG string, never
-      // user-controlled data.
-      el("span", {
-        class: "btn-icon",
-        html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>',
-      })
+    const resolveBtn = iconButton(
+      flag.resolved_at ? REOPEN_ICON : CHECK_ICON,
+      flag.resolved_at ? "Mark as open" : "Mark as resolved"
     );
+    resolveBtn.addEventListener("click", async () => {
+      resolveBtn.disabled = true;
+      try {
+        const result = await setAdminFlagResolved(flag.id, !flag.resolved_at);
+        flag.resolved_at = result.resolved_at;
+        flags = sortFlags(flags);
+        render();
+      } catch {
+        resolveBtn.disabled = false;
+      }
+    });
+
+    const deleteBtn = iconButton(TRASH_ICON, "Delete this flag", "delete-icon");
     deleteBtn.addEventListener("click", async () => {
       deleteBtn.disabled = true;
       try {
@@ -238,7 +279,12 @@ function renderFlagsSection(container, flags) {
       el("td", {}, flag.details || "—"),
       el("td", {}, flag.reporter_email || "Anonymous"),
       el("td", {}, new Date(flag.created_at).toLocaleString()),
-      el("td", {}, deleteBtn)
+      el(
+        "td",
+        {},
+        el("span", { class: `status-badge ${flag.resolved_at ? "resolved" : "open"}` }, flag.resolved_at ? "Resolved" : "Open")
+      ),
+      el("td", { class: "admin-row-actions" }, resolveBtn, deleteBtn)
     );
   }
 

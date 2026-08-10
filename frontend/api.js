@@ -200,6 +200,10 @@ export function deleteAdminFlag(flagId) {
   return request(`/api/admin/flags/${flagId}`, { method: "DELETE" });
 }
 
+export function setAdminFlagResolved(flagId, resolved) {
+  return request(`/api/admin/flags/${flagId}/resolved`, { method: "PUT", body: { resolved } });
+}
+
 export function getAdminMetrics() {
   return request("/api/admin/metrics");
 }

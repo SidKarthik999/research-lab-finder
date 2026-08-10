@@ -618,6 +618,19 @@ def admin_delete_flag(flag_id: int, admin=Depends(require_admin)):
     return {"deleted": True}
 
 
+class ProfessorFlagResolveRequest(BaseModel):
+    resolved: bool
+
+
+@app.put("/api/admin/flags/{flag_id}/resolved")
+@db.with_connection
+def admin_set_flag_resolved(flag_id: int, payload: ProfessorFlagResolveRequest, admin=Depends(require_admin)):
+    found, resolved_at = db.set_professor_flag_resolved(flag_id, payload.resolved)
+    if not found:
+        raise HTTPException(status_code=404, detail="Flag not found")
+    return {"resolved_at": resolved_at}
+
+
 @app.get("/api/admin/metrics")
 @db.with_connection
 def admin_metrics(admin=Depends(require_admin)):

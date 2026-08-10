@@ -791,10 +791,38 @@ button.icon-button {
 
 button.icon-button:hover {
   text-decoration: none;
+  color: var(--accent);
 }
 
-button.icon-button.ghost:hover {
+/* The delete (trash) icon gets its own destructive-action hover color --
+   the resolve/reopen toggle next to it uses the general accent hover above,
+   since marking something resolved isn't destructive. */
+button.icon-button.delete-icon:hover {
   color: var(--error);
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-badge.open {
+  background: color-mix(in srgb, var(--accent-2) 15%, transparent);
+  color: var(--accent-2);
+}
+
+.status-badge.resolved {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
 }
 
 #search-form button {

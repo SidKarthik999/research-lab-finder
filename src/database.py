@@ -965,12 +965,16 @@ def get_recent_flags(limit=200):
         ProfessorFlag.reasons,
         ProfessorFlag.details,
         AppUser.email AS reporter_email,
-        ProfessorFlag.created_at
+        ProfessorFlag.created_at,
+        ProfessorFlag.resolved_at
     FROM ProfessorFlag
     JOIN Professor ON Professor.id = ProfessorFlag.professor_id
     LEFT JOIN Institution ON Institution.id = Professor.institution_id
     LEFT JOIN AppUser ON AppUser.id = ProfessorFlag.user_id
-    ORDER BY ProfessorFlag.created_at DESC
+    -- Open reports first (that's what needs attention), most recent within
+    -- each group next -- not just created_at DESC, which would bury an
+    -- old still-open report under a pile of already-resolved recent ones.
+    ORDER BY (ProfessorFlag.resolved_at IS NOT NULL), ProfessorFlag.created_at DESC
     LIMIT %s;
     '''
     cursor.execute(query, [limit])
@@ -987,6 +991,26 @@ def delete_professor_flag(flag_id):
     connection.commit()
     cursor.close()
     return deleted
+
+def set_professor_flag_resolved(flag_id, resolved):
+    """Returns (found, resolved_at). Distinguishing "not found" from "found,
+    now unresolved" needs cursor.rowcount rather than just checking whether
+    RETURNING's resolved_at came back NULL -- that's also what a successful
+    un-resolve looks like."""
+    connection = get_connection()
+    cursor = connection.cursor()
+    query = '''
+    UPDATE ProfessorFlag
+    SET resolved_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
+    WHERE id = %s
+    RETURNING resolved_at;
+    '''
+    cursor.execute(query, (resolved, flag_id))
+    row = cursor.fetchone()
+    found = cursor.rowcount > 0
+    connection.commit()
+    cursor.close()
+    return found, (row[0] if row else None)
 
 def get_signup_metrics():
     connection = get_connection()
