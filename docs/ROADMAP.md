@@ -1,23 +1,40 @@
 # Research Finder — Roadmap
 
-**Last updated:** 2026-08-10
+**Last updated:** 2026-09-01
 
-> **Next up: Phase 4** (labs, automated). The app — renamed from "Research Lab
-> Finder" to "Research Finder" on 2026-08-08 — is live at
-> `https://research-finder.com` on Render + Neon, with Google OAuth, Resend
-> email delivery, every LLM endpoint capped/rate-limited (Phases 6.1–6.4,
-> done 2026-08-09), and a privacy policy, terms, data-provenance page, and
-> working contact path (Phase 6.5, done 2026-08-10). Phase 6.6 (monitoring):
-> Sentry error reporting is wired up and verified live, and CI now runs the
-> test suite on every push (both done 2026-08-10). An uptime check against
-> `/healthz` is deliberately deferred until there's enough real traffic for
-> it to matter. This was **promoted ahead of
-> Phase 4 on 2026-08-08 at the user's direction**: the app should reach
-> other users before more content (labs) is added. See "Suggested order"
-> for the full reasoning. Phase numbers are deliberately *not* renumbered:
-> several code comments (`src/ingestion/openalex.py`, migration headers)
-> already cite phase numbers, and silently shifting them would make those
-> comments point at the wrong thing.
+> **Phase 6 is fully done — the app is live and the core loop works
+> end-to-end for a stranger.** `https://research-finder.com` (Render + Neon),
+> Google + password auth, Resend email, every LLM endpoint capped/rate-
+> limited, privacy/terms/provenance pages and a contact path, Sentry error
+> reporting verified live, and CI running the suite (2,218 tests) on every
+> push. The uptime check against `/healthz` stays deferred until there's
+> real traffic to protect.
+>
+> **Next up, in order:**
+>
+> 1. **Phase 6.8 — First-run usability.** The app works but a first-time
+>    student is dropped onto a bare form with unlabelled jargon. Verified
+>    sending domain, onboarding guidance, example searches, clearer
+>    field/topic inputs, better empty/stale states. Days of work, highest
+>    usability-per-effort ratio, and several pieces (the Resend sending
+>    domain) are latent bugs, not polish.
+> 2. **Phase 6.9 — Close the enrichment gap.** Publication/topic coverage is
+>    still catching up to the ~196k-professor set on a daily pipeline that
+>    only runs when one Mac is on. This gates search ranking quality, AI
+>    summaries, matching (Phase 7), and defaulting recency filtering on.
+> 3. **Phase 7 — Professor–student matching.** From a student's saved
+>    profile + location + interests, an LLM proposes a ranked shortlist of
+>    aligned professors with a grounded reason for each — so a signed-in
+>    student never starts from a blank form.
+> 4. **Phase 4 — Labs, automated.** Still 45 hand-pasted rows.
+> 5. **Phase 5B — Opportunities** (REU / structured programs), then
+>    **Phase 5C — visual redesign**.
+>
+> Phase numbers are deliberately *not* renumbered: several code comments
+> (`src/ingestion/openalex.py`, migration headers) already cite phase
+> numbers, and silently shifting them would make those comments point at the
+> wrong thing. New work gets the next free number (6.8, 6.9, 7) rather than
+> reordering.
 
 ## The goal
 
@@ -40,7 +57,13 @@ Every phase below is judged against that end-to-end path.
 | `Lab` | 45 | unchanged since the hand-extracted pilot; Stanford + Cornell only — still the gap Phase 4 exists to close |
 | `AppUser` / `AuthIdentity` / `StudentProfile` / `EmailDraft` / `Bookmark` | live | accounts, cold-email drafts, and bookmarking shipped in Phase 5A (2026-08-07/08) |
 
-Because publication/topic enrichment is still catching up to the widened professor set, some things that depend on it (recency filtering, full-text search hit rate for newly-added institutions) are currently opt-in or partial rather than complete — see Phase 3 below.
+Because publication/topic enrichment is still catching up to the widened professor set, some things that depend on it (recency filtering, full-text search hit rate for newly-added institutions) are currently opt-in or partial rather than complete — see Phase 3 below, and Phase 6.9 for the plan to close it.
+
+> **Row counts above are as measured 2026-08-08.** The enrichment pipeline
+> has run daily since, so `Publication`/`ProfessorTopic` coverage is higher
+> now than the "~11%" figure — but it has not been re-measured against
+> production, and it only advances on days the pipeline's Mac is on.
+> Re-measuring is the first task of Phase 6.9.
 
 **Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text search over topics and publication full text (split into `name`/`text`/`topic`/`field`, replacing an earlier combined `q` that turned out to conflate several unrelated things — see commit history), and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips, a Field dropdown, field-scoped topic autocomplete, and an Advanced search section. 137 new tests (309 total).
 
@@ -98,6 +121,17 @@ correctness.
    reporting, and CI running the test suite on every push. The one
    deliberately-deferred piece (an uptime check) is a "come back once
    there are real users" item, not a blocker — see the top of this file.
+8. **The student who arrives doesn't know how to use it.** The loop works,
+   but the entry point is a bare form with fields ("field" vs "topic") a
+   16-year-old can't tell apart, no examples, no guidance on what a
+   realistic ask looks like, and no signal that a profile with no recent
+   publications is stale rather than just un-enriched. And verification
+   email still sends from Resend's shared domain, so a real signup can land
+   in spam. This is Phase 6.8.
+9. **A signed-in student still starts cold.** Even with a saved profile, the
+   app makes them translate their own interests into search filters. It
+   already has interests, level, and location on file — it should be able
+   to propose people. This is Phase 7.
 
 ---
 
@@ -370,7 +404,10 @@ lab coverage does.
   directory can provide.
 - **Ranked matches** across both professors and opportunities, using the
   `StudentProfile` that Phase 5A already introduces — interests, level,
-  location radius.
+  location radius. **The professor half of this ships earlier as Phase 7**
+  (LLM retrieve-then-rerank over `StudentProfile`); its candidate list is
+  built as a typed union so adding `Opportunity` rows here is a data
+  change, not a rewrite of the ranking step.
 
 ---
 
@@ -414,7 +451,7 @@ can't be attributed to either one.
 
 ---
 
-## Phase 6 — Ship it ← **next up**
+## Phase 6 — Ship it ✅ **done (2026-08-07 → 2026-08-10)**
 
 Everything above assumes `localhost`. This phase is what stands between that
 and a URL a student can open. The architecture is already close — one process
@@ -527,11 +564,13 @@ without a network call, same pattern as `build_search_query()`), the actual
 `requests.post()` to Resend's API is the thin impure wrapper around it.
 `render.yaml` sets `EMAIL_BACKEND=resend` with `RESEND_API_KEY` prompted as
 a secret. `EMAIL_FROM` defaults to Resend's own shared sending domain
-(works immediately, fine for testing) — **still open:** verify
-`research-finder.com` in the Resend dashboard (adds its own SPF/DKIM DNS
-records, same idea as the domain-to-Render setup above) and set `EMAIL_FROM`
-to a real address on it, e.g. `noreply@research-finder.com`, before this is
-trusted for real signups.
+(works immediately, fine for testing) — **still open, now tracked as the
+first item of Phase 6.8:** verify `research-finder.com` in the Resend
+dashboard (adds its own SPF/DKIM DNS records, same idea as the
+domain-to-Render setup above) and set `EMAIL_FROM` to a real address on it,
+e.g. `noreply@research-finder.com`. Until this is done, a real signup's
+verification email can be spam-filtered and the account can never be
+confirmed — this is a live bug, not a nicety.
 
 - **Automated backups going forward**, either Neon's point-in-time recovery
   (check what the Launch plan actually includes) or a scheduled `pg_dump`.
@@ -643,7 +682,7 @@ that a localhost prototype doesn't have.
   account and no per-email limit worth enforcing. All four pages are linked
   from a new site footer (`frontend/index.html`).
 
-### 6.6 — Knowing when it breaks
+### 6.6 — Knowing when it breaks ✅ **done (2026-08-10; uptime check deferred)**
 
 - ✅ **Error reporting -- done and verified live (2026-08-10).** `backend/
   error_reporting.py`'s `init_sentry()` wires up Sentry's Python SDK, called
@@ -701,13 +740,171 @@ are what keep that bounded.
 
 **Done when** a student who has never met you can open a URL, search, sign
 in, and get an email draft — and when you'd find out it was broken without a
-user telling you.
+user telling you. ✅ **This is true now.** Phases 6.8–6.9 below are about the
+students who arrive after that being able to *succeed*, not just complete
+the mechanical steps.
+
+### 6.8 — First-run usability ← **next up**
+
+The loop works for someone who already knows what the app is and how to use
+it — i.e. the person who built it. A first-time high schooler lands on a
+bare form with jargon fields and no idea what a good search or a realistic
+ask looks like. Each item below is small; together they're the difference
+between "technically usable" and "a stranger gets a result."
+
+- **Verified sending domain (do this first — it's a live bug).** Verify
+  `research-finder.com` in Resend, add the SPF/DKIM records, set
+  `EMAIL_FROM=noreply@research-finder.com`. Until then a real signup's
+  verification email can be spam-filtered and the account never confirms.
+  Carried over from Phase 6.2.
+- **Onboarding guidance.** A short "How this works / how to approach a
+  professor" page, linked from the header and shown once to a new account.
+  Covers: what the search finds (individual PIs, not a curated lab list),
+  what a credible first email looks like, and that most professors won't
+  have a listed address so the contact panel's search links are the path.
+- **Example searches on the landing page.** 4–6 clickable chips
+  (`machine learning · Boston`, `marine biology · undergraduate`,
+  `materials science · Texas`, …) that run a real search. Turns a blank
+  form into something a first-timer can act on immediately.
+- **Make the field/topic distinction legible.** Either add helper text
+  under each input, or collapse `field` + `topic` into one "research area"
+  box that queries both — most students can't tell OpenAlex's taxonomy
+  level apart and shouldn't have to. `build_search_query()` already matches
+  `topic` against name/field/subfield, so a merged box is mostly a
+  frontend change.
+- **Better empty and stale states.** A zero-results view that suggests a
+  concrete next step ("try a broader field", "remove the location
+  filter"). And a visible "last published 20XX" (or "no recent activity on
+  file") signal on result cards and the detail page, so a student can tell
+  an inactive profile from an un-enriched one without turning on the
+  hidden `recent_only` filter.
+- **Reconcile the "lab" vs "professor" framing.** The hero says "Find a
+  research lab"; results are individual professors, and `Lab` has 45 rows.
+  Until Phase 4 changes that, the copy should say what the tool actually
+  does. One small edit, removes a standing expectation mismatch.
+
+**Done when** a student who has never seen the app can land on it, understand
+what it does, run a sensible search from an example, and read a result
+without needing anything explained.
+
+### 6.9 — Close the enrichment gap
+
+Publication/topic enrichment has been a background daily pipeline since
+Phase 3 widened `Professor` to ~196k. It gates real things: search ranking
+quality (topic/text rank need the data), AI summaries (`insufficient_data`
+when a professor has neither), Phase 7 matching (same), and whether
+`recent_only` can default on. It also only advances on days the pipeline's
+Mac is powered on.
+
+- **Re-measure coverage against production.** `Publication` /
+  `ProfessorTopic` / `ResearchTopic` row counts and the share of
+  professors with ≥1 of each, versus the "~11%" last measured 2026-08-08.
+  This number decides how much of the rest of this phase is urgent.
+- **Move the pipeline off the personal Mac.** The three wrapper scripts
+  are already standalone module entry points sourcing `.env.production`;
+  this is a scheduling change, not a rewrite — GitHub Actions on a cron,
+  or Render/Fly scheduled jobs. Removes the "only runs when the Mac is on"
+  ceiling that Phase 6.3 explicitly left open.
+- **Prioritise enrichment by demand, not uniformly.** Enrich professors in
+  the most-searched fields/institutions first (needs the search-term
+  logging from 6.8's analytics, or a simple ordering by institution
+  works_count as a proxy) so the slices students actually hit fill in
+  before the long tail.
+- **Then default `recent_only` on**, with a result count and an easy
+  toggle off — the Phase 3 note said to revisit this "once the pipeline's
+  had more uninterrupted time to run," and that's this.
+
+**Done when** a typical search returns mostly enriched, ranked results, an
+AI summary is available for most professors a student would actually open,
+and the pipeline keeps running whether or not a specific laptop is awake.
 
 ### Later, once people actually return
 
 - Saved searches and "email me new matches in my field near me" — the
   feature that turns a one-time visit into a returning user. Worth building
   after there's evidence people come back at all.
+
+---
+
+## Phase 7 — Professor–student matching
+
+Search makes a student translate what they want into filters. By the time
+they've signed in and filled a `StudentProfile`, the app already knows their
+interests, level, location, techniques, and what they're looking for — it
+should be able to hand them a ranked shortlist of specific professors with a
+plain-language reason for each, so the starting point is *"here are ten
+people, here's why"* rather than an empty form.
+
+This is the professor half of what Phase 5B's "ranked matches across
+professors and opportunities" describes; building it now (professors only)
+means the retrieve-then-rank machinery already exists when Opportunities
+land, and it's the single biggest lever on the top-of-file goal for a
+signed-in student.
+
+### Shape
+
+**Two stages — retrieval, then rerank. Never send 196k professors to a
+model.**
+
+1. **Candidate retrieval (SQL, no LLM).** Derive structured filters from the
+   profile — topic/field from stated interests, city/state or a metro
+   radius from location, optionally institution type — and reuse the
+   existing `build_search_query()` path to pull the top ~30–50 candidates by
+   today's relevance ranking (topic `works_count`, then text rank, then
+   recency). A new pure `build_candidate_filters(profile)` in
+   `backend/matching.py` does the profile → params mapping.
+2. **LLM rerank + rationale.** Pass the profile plus those ~30 candidates
+   (name, institution, location, topics, a few recent publication
+   titles/abstracts) to the model via structured output; it returns an
+   ordered subset (say the top 10) each with a 1–2 sentence reason grounded
+   **only** in the supplied topics/publications — *"works on protein-design
+   methods, which matches your stated interest in computational biology;
+   2025 paper on X"* — not invented biography. `build_match_prompt(profile,
+   candidates)` is the pure prompt assembler.
+
+### Rules it inherits from the rest of the project
+
+- **Absent beats wrong.** A candidate with no enriched topics/publications
+  can still rank on filters but gets no fabricated rationale. The model may
+  return fewer than N. If retrieval finds nothing (niche interest + small
+  metro), return an empty list with a `reason`, not a padded one — same as
+  the summary endpoint's `insufficient_data`.
+- **Profile text is untrusted input** (the Phase 5A prompt-injection rule).
+  The rerank endpoint only ranks and explains; it never acts on its own
+  output.
+- **Cache it.** New `StudentProfile.matches_json` + `matches_generated_at`
+  (migration `012_*.sql`), keyed to a hash of the profile inputs.
+  Regenerate when the profile changes, on an explicit "refresh", or past an
+  age cutoff — same lazy, no-batch-job pattern as AI summaries.
+- **Cap it.** It's an uncached LLM call over a biggish prompt, so give it a
+  per-user daily cap via the existing `LlmUsage` table (`kind='match'`),
+  same as cold-email and resume import. Only billed calls count.
+- **Split for testability.** `build_candidate_filters()` and
+  `build_match_prompt()` are pure and covered in `tests/test_matching.py`
+  (no DB, no network); `generate_matches()` — the API call — isn't
+  unit-tested, mirroring `generate_summary()` and the OpenAlex fetchers.
+- **New `/api/*` endpoint, opt-in from the frontend.** `GET /api/me/matches`
+  behind `current_user`, requires a saved profile. The search path keeps
+  zero external dependencies and no added latency for signed-out users.
+
+### Frontend
+
+A `#/matches` view (and a section on the signed-in home view for a student
+who has a profile): ranked cards reusing the existing result-card component
+plus the rationale line, each linking to the professor detail page. A
+student with no profile yet sees a prompt linking to the profile form. The
+rationale is labelled AI-generated, like every other model output on the
+site.
+
+### Relation to Phase 5B
+
+Build the candidate list as a typed list of items, not a professors-only
+array, so that when `Opportunity` rows exist the same rerank step ranks
+opportunities alongside professors with no change to the prompt shape.
+
+**Done when** a signed-in student with a filled profile lands on the app and
+sees ~10 specific, plausibly-matched professors — each with a real,
+grounded reason — without touching the search form.
 
 ---
 
@@ -740,15 +937,28 @@ user telling you.
    wired up and verified live in production, and CI running the test
    suite on every push. The uptime check is deliberately deferred until
    there's enough real traffic for it to matter; 6.7 is just a cost
-   writeup, not an action item. **Next up: Phase 4** (labs, automated).
-10. **Phase 4 (labs, automated)** — after Phase 6. More content doesn't help
-    until the app is somewhere other people can reach it; this was the
-    original point of promoting Phase 6.
-11. **Phase 5B** — after Phase 4 (or interleaved, if the high-school /
-    structured-program audience turns out to matter more than lab coverage
-    once there's real usage to look at).
-12. **Phase 5C** — whenever. Not on the critical path, blocks nothing, but
-    should keep following 5A/6 rather than precede them.
+   writeup, not an action item.
+10. **Phase 6.8 (first-run usability)** ← **next up.** Verified sending
+    domain (a live bug), onboarding guidance, example searches, clearer
+    field/topic inputs, better empty/stale states, lab-vs-professor copy.
+    Days of work; it's what stands between "the loop technically works" and
+    "a stranger gets a result."
+11. **Phase 6.9 (close the enrichment gap)** — re-measure production
+    coverage, move the pipeline off the personal Mac, prioritise enrichment
+    by demand, then default `recent_only` on. Gates ranking quality, AI
+    summaries, and Phase 7.
+12. **Phase 7 (professor–student matching)** — LLM-ranked shortlist from a
+    student's saved profile + location + interests. Needs 6.9's coverage to
+    be worth much; do it after. Biggest single lever on the goal for a
+    signed-in student.
+13. **Phase 4 (labs, automated)** — more content doesn't help until the
+    arriving students can already succeed with what's there (6.8–7).
+14. **Phase 5B (opportunities)** — after Phase 4, or interleaved / promoted
+    ahead of it if real usage shows the high-school / structured-program
+    audience matters more than lab coverage. Phase 7's rerank step is built
+    to extend to opportunities when they exist.
+15. **Phase 5C (visual redesign)** — whenever. Not on the critical path,
+    blocks nothing, but should keep following 5A/6 rather than precede them.
 
 ## Principles carried forward
 
