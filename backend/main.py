@@ -445,21 +445,44 @@ def list_topics(
     field: str | None = Query(None, description="Scope suggestions to topics under this field"),
     limit: int = Query(20, ge=1, le=100),
 ):
-    conditions = []
-    params = []
-    if q:
-        conditions.append("name ILIKE %s")
-        params.append(f"%{q}%")
-    if field:
-        conditions.append("field = %s")
-        params.append(field)
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
     connection = get_connection()
     cursor = connection.cursor()
+
+    if not q:
+        # No query text -- just the topic names, optionally scoped to a field.
+        where = "WHERE field = %s" if field else ""
+        cursor.execute(
+            f"SELECT DISTINCT name FROM ResearchTopic {where} ORDER BY name LIMIT %s;",
+            ([field, limit] if field else [limit]),
+        )
+        topics = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        return {"topics": topics}
+
+    # Suggest across all three taxonomy levels, broadest first: a student
+    # typing "neuro" should see "Neuroscience" (a field) above the ~176
+    # specific topics under it, not only the specific ones. `tier` orders
+    # field (0) < subfield (1) < topic name (2). build_search_query()'s
+    # `topic` param already ILIKE-matches name/field/subfield, so any of
+    # these is a valid thing to put in the box.
+    field_filter = "AND field = %(field)s" if field else ""
+    parts = []
+    if not field:
+        parts.append(
+            "SELECT DISTINCT field AS label, 0 AS tier FROM ResearchTopic "
+            "WHERE field IS NOT NULL AND field ILIKE %(q)s"
+        )
+    parts.append(
+        "SELECT DISTINCT subfield AS label, 1 AS tier FROM ResearchTopic "
+        f"WHERE subfield IS NOT NULL AND subfield ILIKE %(q)s {field_filter}"
+    )
+    parts.append(
+        "SELECT DISTINCT name AS label, 2 AS tier FROM ResearchTopic "
+        f"WHERE name ILIKE %(q)s {field_filter}"
+    )
     cursor.execute(
-        f"SELECT DISTINCT name FROM ResearchTopic {where_clause} ORDER BY name LIMIT %s;",
-        [*params, limit],
+        f"SELECT label FROM ({' UNION '.join(parts)}) t ORDER BY tier, label LIMIT %(limit)s;",
+        {"q": f"%{q}%", "field": field, "limit": limit},
     )
     topics = [row[0] for row in cursor.fetchall()]
     cursor.close()

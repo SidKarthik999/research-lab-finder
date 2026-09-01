@@ -390,6 +390,49 @@ main {
   gap: 0.3rem;
 }
 
+/* Custom autocomplete (search.js setupAutocomplete): a themed dropdown
+   anchored to the input's own box, replacing the native <datalist> whose
+   popup couldn't be styled or reliably left-aligned. */
+.autocomplete {
+  position: relative;
+}
+
+.autocomplete input {
+  width: 100%;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px -14px rgba(var(--shadow), 0.45);
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.autocomplete-list li {
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-list li.active,
+.autocomplete-list li:hover {
+  background: var(--surface-2);
+}
+
 label {
   font-size: 0.82rem;
   font-weight: 600;
