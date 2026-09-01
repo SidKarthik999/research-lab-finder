@@ -1,20 +1,29 @@
 // The original single-page search UI, refactored into a router view.
-// Behavior is unchanged from the pre-Phase-5A app.js -- same debounced
-// autocomplete, same field-scoped topic suggestions, same advanced-search
-// fields, same lazy-loaded publications toggle -- only the DOM
-// construction changed, from innerHTML template literals to el().
+//
+// Phase 6.8: the separate "Field" <select> and "Research topic" input were
+// merged into one "Research area" box. Students overwhelmingly can't tell
+// OpenAlex's field/subfield/topic taxonomy levels apart, and they don't
+// have to -- build_search_query()'s `topic` param already ILIKE-matches
+// ResearchTopic name, field, AND subfield, so one free-text box covers
+// everything the old two-control setup did (including the field-scoped
+// topic autocomplete, which went away with the <select>).
 
 import { mount, el } from "../dom.js";
 import {
   searchProfessors,
   listInstitutions,
   listTopics,
-  listFields,
   listInstitutionTypes,
   listMetroAreas,
   getProfessorPublications,
 } from "../api.js";
-import { renderContactLine, topicChips, publicationList, institutionTypeBadge } from "../professor.js";
+import {
+  renderContactLine,
+  topicChips,
+  publicationList,
+  institutionTypeBadge,
+  recencyLine,
+} from "../professor.js";
 
 const LIMIT = 20;
 
@@ -40,7 +49,6 @@ export function renderSearchView(container) {
   // in between, and would defeat the point of "still there" restoration).
   let lastResults = [];
 
-  const fieldSelect = el("select", { id: "field", name: "field" }, el("option", { value: "" }, "Any field"));
   const institutionTypeSelect = el(
     "select",
     { id: "institution_type", name: "institution_type" },
@@ -51,7 +59,7 @@ export function renderSearchView(container) {
     id: "topic",
     name: "topic",
     list: "topic-options",
-    placeholder: "e.g. optogenetics",
+    placeholder: "e.g. neuroscience, or optogenetics",
     autocomplete: "off",
   });
   const topicOptions = el("datalist", { id: "topic-options" });
@@ -77,12 +85,60 @@ export function renderSearchView(container) {
   const countryInput = el("input", { type: "text", id: "country", name: "country" });
   const recentOnlyInput = el("input", { type: "checkbox", id: "recent_only", name: "recent_only" });
 
+  // Examples that populate the form and run a real search, so a first-time
+  // visitor has something to click instead of a blank form. Each maps only
+  // to filters the search actually supports (a topic plus one location
+  // dimension) -- see applyExample below.
+  const EXAMPLE_SEARCHES = [
+    { label: "machine learning · Boston", topic: "machine learning", city: "Boston" },
+    { label: "neuroscience · California", topic: "neuroscience", state: "California" },
+    { label: "materials science · Texas", topic: "materials science", state: "Texas" },
+    { label: "robotics · Michigan", topic: "robotics", state: "Michigan" },
+    { label: "marine biology · Florida", topic: "marine biology", state: "Florida" },
+    { label: "climate science · Washington", topic: "climate science", state: "Washington" },
+  ];
+
+  const examplesEl = el(
+    "div",
+    { class: "search-examples" },
+    el("span", { class: "search-examples-label" }, "Try:"),
+    ...EXAMPLE_SEARCHES.map((ex) =>
+      el("button", { type: "button", class: "chip-button", onClick: () => applyExample(ex) }, ex.label)
+    )
+  );
+
   const hero = el(
     "div",
     { class: "search-hero" },
-    el("h1", {}, "Find a research lab"),
-    el("p", { class: "hero-subtitle" }, "Search professors by research field, topic, institution, or location.")
+    el("h1", {}, "Find a research professor"),
+    el(
+      "p",
+      { class: "hero-subtitle" },
+      "Search individual professors by research field, topic, institution, or location."
+    ),
+    examplesEl
   );
+
+  // Clears the form to exactly the example's filters, then searches. Opens
+  // the advanced section because an example can fill city/state, which live
+  // in there -- unlike a "Near" preset, whose selection shows as a
+  // highlighted chip instead (see setActivePreset).
+  function applyExample({ topic = "", city = "", state = "" }) {
+    topicInput.value = topic;
+    institutionInput.value = "";
+    nameInput.value = "";
+    textInput.value = "";
+    cityInput.value = city;
+    stateInput.value = state;
+    countryInput.value = "";
+    institutionTypeSelect.value = "";
+    recentOnlyInput.checked = false;
+    activeMetro = null;
+    for (const { button } of presetButtons) button.classList.remove("active");
+    clearLocationBtn.hidden = true;
+    advancedDetails.open = Boolean(city || state);
+    runSearch(1);
+  }
 
   // Each preset expands server-side to a curated metro-area city list (see
   // backend/metro_areas.py) rather than a single city -- "Near NYC" means
@@ -139,8 +195,8 @@ export function renderSearchView(container) {
       locationPresetsEl.append(clearLocationBtn);
       // A saved metro selection can only be highlighted once its chip
       // actually exists -- the restore logic (below) runs before this
-      // fetch resolves, same reason fieldSelect/institutionTypeSelect
-      // restore their values here rather than in that block.
+      // fetch resolves, same reason institutionTypeSelect restores its
+      // value here rather than in that block.
       if (savedSearchState) {
         const metro = savedSearchState.filters.metro;
         for (const { id, button } of presetButtons) button.classList.toggle("active", id === metro);
@@ -204,8 +260,19 @@ export function renderSearchView(container) {
   const form = el(
     "form",
     { id: "search-form" },
-    el("div", { class: "field" }, el("label", { for: "field" }, "Field"), fieldSelect),
-    el("div", { class: "field" }, el("label", { for: "topic" }, "Research topic"), topicInput, topicOptions),
+    el(
+      "div",
+      { class: "field" },
+      el("label", { for: "topic" }, "Research area"),
+      topicInput,
+      topicOptions,
+      el(
+        "p",
+        { class: "hint" },
+        "A broad field (“neuroscience”, “computer science”) or a specific topic " +
+          "(“optogenetics”, “perovskite solar cells”) — both work."
+      )
+    ),
     el(
       "div",
       { class: "field" },
@@ -265,27 +332,10 @@ export function renderSearchView(container) {
     return data.institutions;
   });
 
-  // Re-scope suggestions immediately if the user picks a field after
-  // already typing a topic, rather than waiting for their next keystroke.
-  const refreshTopicSuggestions = setupAutocomplete(topicInput, topicOptions, async (value) => {
-    const data = await listTopics(value, fieldSelect.value || undefined, 10);
+  setupAutocomplete(topicInput, topicOptions, async (value) => {
+    const data = await listTopics(value, undefined, 10);
     return data.topics;
   });
-  fieldSelect.addEventListener("change", refreshTopicSuggestions);
-
-  (async () => {
-    try {
-      const data = await listFields();
-      for (const name of data.fields) {
-        fieldSelect.append(el("option", { value: name }, name));
-      }
-      // A saved field selection can only be applied once its <option> exists
-      // -- restoreSearchState() (below) runs before this fetch resolves.
-      if (savedSearchState) fieldSelect.value = savedSearchState.filters.field;
-    } catch {
-      // Field is a nice-to-have filter -- leave it as "Any field" on failure.
-    }
-  })();
 
   (async () => {
     try {
@@ -329,13 +379,46 @@ export function renderSearchView(container) {
 
   function renderResults(results) {
     if (results.length === 0) {
-      statusEl.textContent = "No professors found. Try broadening your search.";
+      if (currentPage > 1) {
+        statusEl.textContent = "No more results.";
+        resultsEl.replaceChildren(
+          el("li", { class: "empty-state-card" }, el("p", {}, "You’ve reached the end of the results."))
+        );
+      } else {
+        statusEl.textContent = "No professors found.";
+        resultsEl.replaceChildren(emptyStateCard());
+      }
       return;
     }
     statusEl.textContent = `${results.length} result${results.length === 1 ? "" : "s"} on this page.`;
     for (const professor of results) {
       resultsEl.append(renderCard(professor));
     }
+  }
+
+  // A zero-results view that names concrete filters to relax, picked from
+  // whatever's actually set, rather than one generic "try broadening" line.
+  function emptyStateCard() {
+    const tips = [];
+    if (institutionInput.value.trim()) tips.push("Remove the institution filter.");
+    if (cityInput.value.trim() || stateInput.value.trim() || countryInput.value.trim() || activeMetro) {
+      tips.push("Remove or widen the location filter.");
+    }
+    if (institutionTypeSelect.value) tips.push("Set institution type back to “Any”.");
+    if (textInput.value.trim()) {
+      tips.push("Clear “Search publication names” — it’s stricter than the research area box.");
+    }
+    if (recentOnlyInput.checked) {
+      tips.push("Turn off “only recently active” — publication data is still being filled in for many professors.");
+    }
+    tips.push("Try a broader research area — a field name like “biology” rather than one specific method.");
+
+    return el(
+      "li",
+      { class: "empty-state-card" },
+      el("p", {}, "No professors matched every filter. Things to try:"),
+      el("ul", {}, tips.map((tip) => el("li", {}, tip)))
+    );
   }
 
   function renderCard(professor) {
@@ -360,6 +443,7 @@ export function renderSearchView(container) {
       el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
       location ? el("p", { class: "meta" }, location) : null,
       institutionTypeBadge(professor.institution_type),
+      recencyLine(professor.last_publication_date),
       topicChips(professor.topics),
       renderContactLine(professor),
       toggleBtn,
@@ -421,8 +505,8 @@ export function renderSearchView(container) {
     recentOnlyInput.checked = filters.recent_only;
     activeMetro = filters.metro;
     advancedDetails.open = advancedOpen;
-    // fieldSelect/institutionTypeSelect are restored separately, above,
-    // once their options actually exist to select.
+    // institutionTypeSelect is restored separately, above, once its
+    // <option>s actually exist to select.
 
     currentPage = page;
     lastResults = results;
@@ -448,7 +532,6 @@ export function renderSearchView(container) {
         state: stateInput.value,
         country: countryInput.value,
         recent_only: recentOnlyInput.checked,
-        field: fieldSelect.value,
         institution_type: institutionTypeSelect.value,
         metro: activeMetro,
       },

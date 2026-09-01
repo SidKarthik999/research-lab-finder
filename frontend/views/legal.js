@@ -24,7 +24,7 @@ export async function renderPrivacyView(container) {
         el(
           "p",
           {},
-          "Research Finder helps students find academic research labs by field, location, and institution. The " +
+          "Research Finder helps students find academic research professors by field, location, and institution. The " +
             "professor, institution, and publication data on this site is drawn from public sources -- see "
         ),
         el(

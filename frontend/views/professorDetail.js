@@ -22,7 +22,14 @@ import {
   unbookmarkProfessor,
   updateColdEmailDraft,
 } from "../api.js";
-import { publicationList, renderContactLine, topicChips, institutionTypeBadge } from "../professor.js";
+import {
+  publicationList,
+  renderContactLine,
+  topicChips,
+  institutionTypeBadge,
+  recencyLine,
+  latestPublicationDate,
+} from "../professor.js";
 import { getCurrentUser } from "../session.js";
 
 const AI_DISCLOSURE = "AI-generated from this professor's public research record — may be incomplete or imprecise.";
@@ -82,7 +89,8 @@ export async function renderProfessorDetailView(container, params) {
         el("h1", {}, name),
         el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
         location ? el("p", { class: "meta" }, location) : null,
-        institutionTypeBadge(professor.institution_type)
+        institutionTypeBadge(professor.institution_type),
+        recencyLine(latestPublicationDate(publications))
       )
     ),
     el(

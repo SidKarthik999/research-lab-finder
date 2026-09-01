@@ -21,6 +21,7 @@ import { renderBookmarksView } from "./views/bookmarks.js";
 import { renderAdminView } from "./views/admin.js";
 import { renderAboutView, renderPrivacyView, renderTermsView } from "./views/legal.js";
 import { renderContactView } from "./views/contact.js";
+import { renderGuideView, hasSeenGuide } from "./views/guide.js";
 
 const accountNavEl = document.getElementById("account-nav");
 const appEl = document.getElementById("app");
@@ -113,6 +114,7 @@ registerRoute("/privacy", renderPrivacyView);
 registerRoute("/terms", renderTermsView);
 registerRoute("/about", renderAboutView);
 registerRoute("/contact", renderContactView);
+registerRoute("/guide", renderGuideView);
 
 // Registered before initSession() runs, so its internal notify() call
 // already covers the first render -- no separate initial call needed.
@@ -120,5 +122,16 @@ onSessionChange(renderAccountNav);
 
 (async () => {
   await initSession();
+
+  // Show the guide once to a signed-in account that hasn't seen it -- new
+  // Google users (no post-signup step to hook) and anyone from before the
+  // guide existed. Only fires when landing on root, so it never hijacks a
+  // deep link or a verification link; renderGuideView sets the flag.
+  const hash = window.location.hash.replace(/^#/, "");
+  const atRoot = hash === "" || hash === "/";
+  if (getCurrentUser() && atRoot && !hasSeenGuide()) {
+    window.location.hash = "/guide?welcome=1";
+  }
+
   initRouter(appEl, { notFound: renderNotFound });
 })();
