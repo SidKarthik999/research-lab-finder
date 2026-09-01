@@ -10,24 +10,24 @@
 > push. The uptime check against `/healthz` stays deferred until there's
 > real traffic to protect.
 >
+> **Phase 6.8 (first-run usability) is done as of 2026-09-01:** verified
+> Resend sending domain, landing-page example searches, the merged
+> field/topic "Research area" box, zero-results guidance + a
+> publication-recency line on every card, the lab-vs-professor copy, and a
+> `#/guide` onboarding page (header link + shown once to a new account).
+>
 > **Next up, in order:**
 >
-> 1. **Phase 6.8 — First-run usability.** The app works but a first-time
->    student is dropped onto a bare form with unlabelled jargon. Verified
->    sending domain, onboarding guidance, example searches, clearer
->    field/topic inputs, better empty/stale states. Days of work, highest
->    usability-per-effort ratio, and several pieces (the Resend sending
->    domain) are latent bugs, not polish.
-> 2. **Phase 6.9 — Close the enrichment gap.** Publication/topic coverage is
+> 1. **Phase 6.9 — Close the enrichment gap.** Publication/topic coverage is
 >    still catching up to the ~196k-professor set on a daily pipeline that
 >    only runs when one Mac is on. This gates search ranking quality, AI
 >    summaries, matching (Phase 7), and defaulting recency filtering on.
-> 3. **Phase 7 — Professor–student matching.** From a student's saved
+> 2. **Phase 7 — Professor–student matching.** From a student's saved
 >    profile + location + interests, an LLM proposes a ranked shortlist of
 >    aligned professors with a grounded reason for each — so a signed-in
 >    student never starts from a blank form.
-> 4. **Phase 4 — Labs, automated.** Still 45 hand-pasted rows.
-> 5. **Phase 5B — Opportunities** (REU / structured programs), then
+> 3. **Phase 4 — Labs, automated.** Still 45 hand-pasted rows.
+> 4. **Phase 5B — Opportunities** (REU / structured programs), then
 >    **Phase 5C — visual redesign**.
 >
 > Phase numbers are deliberately *not* renumbered: several code comments
@@ -563,14 +563,13 @@ time-limited. `backend/email.py` gained an `EMAIL_BACKEND=resend` branch —
 without a network call, same pattern as `build_search_query()`), the actual
 `requests.post()` to Resend's API is the thin impure wrapper around it.
 `render.yaml` sets `EMAIL_BACKEND=resend` with `RESEND_API_KEY` prompted as
-a secret. `EMAIL_FROM` defaults to Resend's own shared sending domain
-(works immediately, fine for testing) — **still open, now tracked as the
-first item of Phase 6.8:** verify `research-finder.com` in the Resend
-dashboard (adds its own SPF/DKIM DNS records, same idea as the
-domain-to-Render setup above) and set `EMAIL_FROM` to a real address on it,
-e.g. `noreply@research-finder.com`. Until this is done, a real signup's
-verification email can be spam-filtered and the account can never be
-confirmed — this is a live bug, not a nicety.
+a secret. ✅ **Resolved (2026-09-01):** `research-finder.com` is a verified
+Resend sending domain (SPF/DKIM published), `EMAIL_FROM` is set to
+`Research Finder <noreply@research-finder.com>` in Render, and
+`backend/email.py` now defaults to that same address so a missing env var
+degrades safely rather than to the shared `onboarding@resend.dev` testing
+domain. Signup → verification email → confirmed account was tested
+end-to-end against production and the email lands in the inbox.
 
 - **Automated backups going forward**, either Neon's point-in-time recovery
   (check what the Launch plan actually includes) or a scheduled `pg_dump`.
@@ -744,7 +743,7 @@ user telling you. ✅ **This is true now.** Phases 6.8–6.9 below are about the
 students who arrive after that being able to *succeed*, not just complete
 the mechanical steps.
 
-### 6.8 — First-run usability ← **next up**
+### 6.8 — First-run usability ✅ **done (2026-09-01)**
 
 The loop works for someone who already knows what the app is and how to use
 it — i.e. the person who built it. A first-time high schooler lands on a
@@ -752,36 +751,58 @@ bare form with jargon fields and no idea what a good search or a realistic
 ask looks like. Each item below is small; together they're the difference
 between "technically usable" and "a stranger gets a result."
 
-- **Verified sending domain (do this first — it's a live bug).** Verify
-  `research-finder.com` in Resend, add the SPF/DKIM records, set
-  `EMAIL_FROM=noreply@research-finder.com`. Until then a real signup's
-  verification email can be spam-filtered and the account never confirms.
-  Carried over from Phase 6.2.
-- **Onboarding guidance.** A short "How this works / how to approach a
-  professor" page, linked from the header and shown once to a new account.
-  Covers: what the search finds (individual PIs, not a curated lab list),
-  what a credible first email looks like, and that most professors won't
-  have a listed address so the contact panel's search links are the path.
-- **Example searches on the landing page.** 4–6 clickable chips
-  (`machine learning · Boston`, `marine biology · undergraduate`,
-  `materials science · Texas`, …) that run a real search. Turns a blank
-  form into something a first-timer can act on immediately.
-- **Make the field/topic distinction legible.** Either add helper text
-  under each input, or collapse `field` + `topic` into one "research area"
-  box that queries both — most students can't tell OpenAlex's taxonomy
-  level apart and shouldn't have to. `build_search_query()` already matches
-  `topic` against name/field/subfield, so a merged box is mostly a
-  frontend change.
-- **Better empty and stale states.** A zero-results view that suggests a
-  concrete next step ("try a broader field", "remove the location
-  filter"). And a visible "last published 20XX" (or "no recent activity on
-  file") signal on result cards and the detail page, so a student can tell
-  an inactive profile from an un-enriched one without turning on the
-  hidden `recent_only` filter.
-- **Reconcile the "lab" vs "professor" framing.** The hero says "Find a
-  research lab"; results are individual professors, and `Lab` has 45 rows.
-  Until Phase 4 changes that, the copy should say what the tool actually
-  does. One small edit, removes a standing expectation mismatch.
+- ✅ **Verified sending domain (2026-09-01).** `research-finder.com` is
+  verified in Resend with SPF/DKIM published, `EMAIL_FROM` is set to
+  `Research Finder <noreply@research-finder.com>` in Render (and is now the
+  `backend/email.py` fallback too), and signup → verification → confirmed
+  account was tested end-to-end against production with the email landing in
+  the inbox. This was the "live bug" carried over from Phase 6.2.
+- ✅ **Onboarding guidance (2026-09-01).** `#/guide` (`frontend/views/
+  guide.js`) — a short static page covering what a search returns
+  (individual PIs, not a curated lab list), that most professors have no
+  public email so the contact panel's Scholar/site-search links are the
+  path, what a credible first email looks like, and what an account adds.
+  Linked from the header ("How it works", new `.site-nav`). Shown once to a
+  new account: the email-verification view routes fresh password signups to
+  `#/guide?welcome=1`, and `app.js` redirects any signed-in user who lands
+  on root without the `rf_seen_guide` localStorage flag (covers Google's
+  first sign-in, which has no post-signup step to hook). Only fires on a
+  root landing, so it never hijacks a deep or verification link.
+- ✅ **Example searches on the landing page (2026-09-01).** Six clickable
+  chips under the hero (`machine learning · Boston`, `neuroscience ·
+  California`, `materials science · Texas`, `robotics · Michigan`, `marine
+  biology · Florida`, `climate science · Washington`) that fill the form and
+  run a real search (`EXAMPLE_SEARCHES` / `applyExample` in
+  `frontend/views/search.js`, reusing the existing `.chip-button` style).
+  Each maps only to filters search actually supports — a topic plus one
+  location dimension — and opens the advanced section when it fills
+  city/state so the applied filter is visible.
+- ✅ **Made the field/topic distinction legible (2026-09-01).** Collapsed
+  the "Field" `<select>` and "Research topic" input into one "Research area"
+  text box (name still `topic`, so `build_search_query()`'s existing
+  ILIKE-match against ResearchTopic name/field/subfield covers both levels)
+  with helper text spelling out that a broad field or a specific topic both
+  work. The field-scoped topic autocomplete went away with the `<select>`;
+  autocomplete is now unscoped. `/api/fields` and `listTopics`' `field`
+  param are left in place for a possible future facet but are no longer
+  called from the search form. Frontend-only change — `search.js`.
+- ✅ **Better empty and stale states (2026-09-01).** Zero results now
+  render a dashed guidance card (`emptyStateCard()` in `search.js`) that
+  lists concrete filters to relax, chosen from whichever are actually set
+  (institution, location, institution type, publication-text, recent-only)
+  plus a "try a broader research area" fallback; paging past the last page
+  shows "You've reached the end" instead. And every result card and the
+  detail hero carry a `recencyLine()` (`professor.js`): "Last published
+  20XX" from `/api/search`'s `last_publication_date` (already returned per
+  row) / the max date of the detail page's loaded publications, or "No
+  publications on file yet — this profile may not be fully enriched" when
+  there's no date — deliberately not "inactive", since null means
+  un-enriched here. Frontend-only.
+- ✅ **Reconciled the "lab" vs "professor" framing (2026-09-01).** The hero
+  now reads "Find a research professor" / "Search individual professors by
+  research field, topic, institution, or location", and the privacy page's
+  one-line description was updated to match. Revisit once Phase 4 gives
+  `Lab` real coverage.
 
 **Done when** a student who has never seen the app can land on it, understand
 what it does, run a sensible search from an example, and read a result
@@ -938,12 +959,13 @@ grounded reason — without touching the search form.
    suite on every push. The uptime check is deliberately deferred until
    there's enough real traffic for it to matter; 6.7 is just a cost
    writeup, not an action item.
-10. **Phase 6.8 (first-run usability)** ← **next up.** Verified sending
-    domain (a live bug), onboarding guidance, example searches, clearer
-    field/topic inputs, better empty/stale states, lab-vs-professor copy.
-    Days of work; it's what stands between "the loop technically works" and
-    "a stranger gets a result."
-11. **Phase 6.9 (close the enrichment gap)** — re-measure production
+10. ~~**Phase 6.8 (first-run usability)**~~ — done 2026-09-01. Verified
+    sending domain (was a live bug), a `#/guide` onboarding page (header
+    link + shown once to new accounts), landing-page example-search chips,
+    the merged field/topic "Research area" box, zero-results guidance plus
+    a publication-recency line on every result, and the lab-vs-professor
+    copy fix.
+11. **Phase 6.9 (close the enrichment gap)** ← **next up.** Re-measure production
     coverage, move the pipeline off the personal Mac, prioritise enrichment
     by demand, then default `recent_only` on. Gates ranking quality, AI
     summaries, and Phase 7.

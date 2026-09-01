@@ -282,11 +282,10 @@ export async function renderVerifyEmailView(container, params, query) {
   mount(container, el("p", { class: "empty-state" }, "Verifying…"));
   try {
     setCurrentUser(await verifyEmail(token));
-    mount(
-      container,
-      el("p", { class: "form-success" }, "Your email is verified and you're signed in."),
-      el("a", { href: "#/", class: "back-link" }, "Continue to search")
-    );
+    // A fresh account: send them straight to the one-time guide rather than
+    // an interstitial "verified" screen. app.js's once-only redirect covers
+    // Google's first sign-in; this covers password signups.
+    navigate("/guide?welcome=1");
   } catch (err) {
     mount(container, el("p", { class: "form-error" }, `Couldn't verify this link: ${err.message}`));
   }

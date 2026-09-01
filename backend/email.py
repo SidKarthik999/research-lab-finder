@@ -52,14 +52,13 @@ def _send_resend(to, subject, body):
     if not api_key:
         raise RuntimeError("EMAIL_BACKEND=resend but RESEND_API_KEY is unset")
 
-    # EMAIL_FROM defaults to Resend's own shared sending domain, which works
-    # immediately with zero setup but is meant for testing, not real
-    # delivery at scale -- verify research-finder.com in the Resend
-    # dashboard (adds SPF/DKIM DNS records, same idea as the Render domain
-    # setup) and set EMAIL_FROM to an address on it, e.g.
-    # "Research Finder <noreply@research-finder.com>", before relying on
-    # this for real users.
-    from_address = os.environ.get("EMAIL_FROM", "Research Finder <onboarding@resend.dev>")
+    # research-finder.com is verified in Resend (SPF/DKIM published), so the
+    # default is a real address on it rather than Resend's shared
+    # onboarding@resend.dev domain -- that shared domain was only ever meant
+    # for testing and a real signup's verification email sent from it can be
+    # spam-filtered. Production still sets EMAIL_FROM explicitly (render.yaml);
+    # this default just keeps the fallback safe if that env var goes missing.
+    from_address = os.environ.get("EMAIL_FROM", "Research Finder <noreply@research-finder.com>")
 
     response = requests.post(
         RESEND_API_URL,

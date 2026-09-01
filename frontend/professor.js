@@ -84,6 +84,38 @@ export function renderContactLine(professor) {
   return el("p", { class: "contact-line" }, ...links);
 }
 
+// How current the stored publication record is. Lets a student tell "no
+// recent work" apart from "this profile hasn't been enriched yet" -- a
+// real distinction while publication/topic ingestion is still catching up
+// to the ~196k-professor set (see docs/ROADMAP.md Phase 6.9). Deliberately
+// does not say "inactive": a null date here means "we have no publications
+// on file", which is not the same claim.
+//   isoDate: the ISO date string /api/search returns per row as
+//   `last_publication_date` (null when nothing is linked), or the value
+//   from latestPublicationDate() on the detail page.
+export function recencyLine(isoDate) {
+  if (!isoDate) {
+    return el(
+      "p",
+      { class: "meta recency-line" },
+      "No publications on file yet — this profile may not be fully enriched."
+    );
+  }
+  return el("p", { class: "meta recency-line" }, `Last published ${String(isoDate).slice(0, 4)}`);
+}
+
+// Newest publication_date in a list, as an ISO string, or null. ISO dates
+// sort correctly as plain strings, so no Date parsing needed.
+export function latestPublicationDate(publications) {
+  let latest = null;
+  for (const pub of publications || []) {
+    if (pub.publication_date && (!latest || pub.publication_date > latest)) {
+      latest = pub.publication_date;
+    }
+  }
+  return latest;
+}
+
 // topics may be an array of plain strings (the /api/search response's
 // top-3 chip list) or an array of {name, ...} objects (the professor
 // detail endpoint's full topic list) -- handle both rather than making
