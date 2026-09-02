@@ -1,0 +1,80 @@
+# Enrichment pipeline, scheduled -- docs/ROADMAP.md Phase 6.9.
+#
+# Publication/topic/name enrichment was three launchd agents on a personal
+# Mac (launchd/*.plist), which only made progress on days that machine was
+# on. This runs the same module entry points on GitHub's schedule instead,
+# so coverage keeps climbing toward the ~196k-professor set unattended.
+#
+# Each module is safe to run repeatedly and to interrupt:
+#   - publications / topics: get_professors_without_{publications,topics}()
+#     skip anyone already done, and both have a consecutive-failure circuit
+#     breaker that stops the run cleanly once OpenAlex's daily budget looks
+#     exhausted (see each module's __main__). A timeout kill just resumes
+#     next run.
+#   - enrich_names: get_professors_with_orcid() orders name_checked_at ASC
+#     NULLS FIRST, so never-checked professors go first; a resumed run keeps
+#     making forward progress. It re-checks done ones eventually, which is
+#     free (ORCID's public API), so it runs on a weekly cadence rather than
+#     daily.
+#
+# Plain pip + requirements-dev.txt, same as ci.yml (pyalex lives there).
+name: Enrich
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_enrich_names:
+        description: "Also run the ORCID name/link check (slow)"
+        type: boolean
+        default: false
+  schedule:
+    # Daily: publications + topics.
+    - cron: "17 8 * * *"
+    # Weekly (Sunday): the above plus enrich_names.
+    - cron: "17 6 * * 0"
+
+# Never let two enrichment runs overlap (a long one straddling the next
+# schedule); let the running one finish rather than cancelling it.
+concurrency:
+  group: enrich
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    # Under GitHub's 6h hard cap, with room for the job to wind down.
+    timeout-minutes: 330
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Optional. With them, OpenAlex's polite pool gives a higher rate
+      # limit (more professors per run) and ORCID's throttle drops from
+      # 1.0s to 0.1s between requests. Without them the modules still run,
+      # just slower -- exactly as they do on the Mac when its .env lacks
+      # them.
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
+      ORCID_CLIENT_ID: ${{ secrets.ORCID_CLIENT_ID }}
+      ORCID_CLIENT_SECRET: ${{ secrets.ORCID_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Publications
+        run: python -m src.ingestion.publications
+
+      - name: Topics
+        # Run even if the publications step exited non-zero -- they share
+        # only the OpenAlex budget, not state.
+        if: ${{ !cancelled() }}
+        run: python -m src.ingestion.topics
+
+      - name: Names + ORCID check
+        # Weekly schedule, or a manual run that asked for it.
+        if: ${{ !cancelled() && (github.event.schedule == '17 6 * * 0' || inputs.run_enrich_names) }}
+        run: python -m src.ingestion.enrich_names

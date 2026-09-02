@@ -19,9 +19,13 @@
 > **Next up, in order:**
 >
 > 1. **Phase 6.9 — Close the enrichment gap.** Publication/topic coverage is
->    still catching up to the ~196k-professor set on a daily pipeline that
->    only runs when one Mac is on. This gates search ranking quality, AI
->    summaries, matching (Phase 7), and defaulting recency filtering on.
+>    still catching up to the ~196k-professor set: **34.8% have a
+>    `Publication`, 47.1% a topic** (re-measured 2026-09-01, up from ~11%).
+>    The pipeline now runs on GitHub Actions, not just one Mac
+>    (`.github/workflows/enrich.yml`, 2026-09-01). Remaining: prioritise
+>    enrichment by demand, then default `recent_only` on once coverage is
+>    high enough. This gates search ranking quality, AI summaries, and
+>    matching (Phase 7).
 > 2. **Phase 7 — Professor–student matching.** From a student's saved
 >    profile + location + interests, an LLM proposes a ranked shortlist of
 >    aligned professors with a grounded reason for each — so a signed-in
@@ -59,11 +63,15 @@ Every phase below is judged against that end-to-end path.
 
 Because publication/topic enrichment is still catching up to the widened professor set, some things that depend on it (recency filtering, full-text search hit rate for newly-added institutions) are currently opt-in or partial rather than complete — see Phase 3 below, and Phase 6.9 for the plan to close it.
 
-> **Row counts above are as measured 2026-08-08.** The enrichment pipeline
-> has run daily since, so `Publication`/`ProfessorTopic` coverage is higher
-> now than the "~11%" figure — but it has not been re-measured against
-> production, and it only advances on days the pipeline's Mac is on.
-> Re-measuring is the first task of Phase 6.9.
+> **Enrichment coverage, re-measured against production 2026-09-01** (first
+> task of Phase 6.9): of 196,382 professors (99.98% with an OpenAlex id),
+> **34.8% now have ≥1 `Publication`** (68,424) and **47.1% have ≥1
+> `ProfessorTopic`** (92,535) — up from ~11% on 2026-08-08. 521,387
+> `Publication` rows, 4,377 `ResearchTopic` rows. Real progress, but still
+> under half on publications: not enough to default `recent_only` on yet
+> (it would hide ~65% of professors). The pipeline now runs on GitHub
+> Actions (`.github/workflows/enrich.yml`), not just the personal Mac, so
+> this keeps climbing whether or not that laptop is awake.
 
 **Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text search over topics and publication full text (split into `name`/`text`/`topic`/`field`, replacing an earlier combined `q` that turned out to conflate several unrelated things — see commit history), and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips, a Field dropdown, field-scoped topic autocomplete, and an Advanced search section. 137 new tests (309 total).
 
@@ -814,18 +822,31 @@ Publication/topic enrichment has been a background daily pipeline since
 Phase 3 widened `Professor` to ~196k. It gates real things: search ranking
 quality (topic/text rank need the data), AI summaries (`insufficient_data`
 when a professor has neither), Phase 7 matching (same), and whether
-`recent_only` can default on. It also only advances on days the pipeline's
-Mac is powered on.
+`recent_only` can default on. As of 2026-09-01 it runs on GitHub Actions
+(`.github/workflows/enrich.yml`), not only the personal Mac, so it advances
+every day regardless of whether that laptop is on.
 
-- **Re-measure coverage against production.** `Publication` /
-  `ProfessorTopic` / `ResearchTopic` row counts and the share of
-  professors with ≥1 of each, versus the "~11%" last measured 2026-08-08.
-  This number decides how much of the rest of this phase is urgent.
-- **Move the pipeline off the personal Mac.** The three wrapper scripts
-  are already standalone module entry points sourcing `.env.production`;
-  this is a scheduling change, not a rewrite — GitHub Actions on a cron,
-  or Render/Fly scheduled jobs. Removes the "only runs when the Mac is on"
-  ceiling that Phase 6.3 explicitly left open.
+- ✅ **Re-measured coverage against production (2026-09-01).** 196,382
+  professors; **34.8%** with ≥1 `Publication` (68,424), **47.1%** with ≥1
+  `ProfessorTopic` (92,535), up from ~11% on 2026-08-08. 521,387
+  `Publication` rows. Verdict: steady progress, still under half on
+  publications — the enrichment run needs to keep going, and
+  `recent_only` stays opt-in until it's substantially higher.
+- ✅ **Moved the pipeline off the personal Mac (2026-09-01).**
+  `.github/workflows/enrich.yml` runs `src.ingestion.publications` +
+  `src.ingestion.topics` daily and adds `src.ingestion.enrich_names`
+  weekly, on GitHub Actions — no wrapper scripts (they hardcode a
+  miniconda path and redirect to local logfiles), the module `__main__`
+  blocks directly, `requirements-dev.txt` for deps (pyalex lives there),
+  `DATABASE_URL` + optional OpenAlex/ORCID creds as repo secrets,
+  `concurrency: enrich` so runs never overlap, `timeout-minutes: 330`
+  under GitHub's 6h cap. The skip-queries + circuit breakers already in
+  each module make a timeout kill a clean resume. The launchd agents on
+  the Mac can stay as a redundant runner or be disabled — either is fine
+  now. **Setup:** add the secrets in the repo's Settings → Secrets and
+  variables → Actions (`DATABASE_URL` required; `OPENALEX_API_KEY`,
+  `OPENALEX_EMAIL`, `ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET` optional but
+  speed it up).
 - **Prioritise enrichment by demand, not uniformly.** Enrich professors in
   the most-searched fields/institutions first (needs the search-term
   logging from 6.8's analytics, or a simple ordering by institution
