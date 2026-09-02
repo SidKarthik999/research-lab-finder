@@ -39,6 +39,7 @@ let savedSearchState = null;
 
 export function renderSearchView(container) {
   let currentPage = 1;
+  let searchRequestId = 0;
   // Set by a "Near" preset click; cleared as soon as the user edits
   // city/state/country by hand, so a stale preset never silently narrows a
   // manual search the user thinks they fully control.
@@ -415,6 +416,7 @@ export function renderSearchView(container) {
   }
 
   async function runSearch(page = 1) {
+    const requestId = ++searchRequestId;
     currentPage = page;
     statusEl.textContent = "Searching...";
     resultsEl.replaceChildren();
@@ -423,10 +425,14 @@ export function renderSearchView(container) {
     try {
       data = await searchProfessors({ ...currentFilters(), page, limit: LIMIT });
     } catch (err) {
+      if (requestId !== searchRequestId) return;
       statusEl.textContent = `Something went wrong: ${err.message}`;
       return;
     }
 
+    // Searches can finish out of order. Only the latest request may update
+    // results, pagination, or the results saved when leaving this view.
+    if (requestId !== searchRequestId) return;
     lastResults = data.results;
     renderResults(data.results);
     updatePagination(data.results.length);
@@ -577,6 +583,7 @@ export function renderSearchView(container) {
   }
 
   return function cleanup() {
+    searchRequestId++;
     savedSearchState = {
       filters: {
         name: nameInput.value,
