@@ -69,9 +69,10 @@ Because publication/topic enrichment is still catching up to the widened profess
 > `ProfessorTopic`** (92,535) — up from ~11% on 2026-08-08. 521,387
 > `Publication` rows, 4,377 `ResearchTopic` rows. Real progress, but still
 > under half on publications: not enough to default `recent_only` on yet
-> (it would hide ~65% of professors). The pipeline now runs on GitHub
-> Actions (`.github/workflows/enrich.yml`), not just the personal Mac, so
-> this keeps climbing whether or not that laptop is awake.
+> (it would hide ~65% of professors). As of 2026-09-02 the pipeline runs
+> only on GitHub Actions (`.github/workflows/enrich.yml`) — the Mac
+> launchd agents are disabled — so it keeps climbing whether or not that
+> laptop is awake.
 
 **Phase 1 is done**: `/api/search` now has `topic`/`field` filters, free-text search over topics and publication full text (split into `name`/`text`/`topic`/`field`, replacing an earlier combined `q` that turned out to conflate several unrelated things — see commit history), and relevance ranking (topic match, then text rank, then recency) in place of the old alphabetical order. Frontend has topic chips, a Field dropdown, field-scoped topic autocomplete, and an Advanced search section. 137 new tests (309 total).
 
@@ -582,7 +583,12 @@ end-to-end against production and the email lands in the inbox.
 - **Automated backups going forward**, either Neon's point-in-time recovery
   (check what the Launch plan actually includes) or a scheduled `pg_dump`.
 
-### 6.3 — Where the ingestion pipeline runs ✅ **decided and wired up (2026-08-08)**
+### 6.3 — Where the ingestion pipeline runs ✅ **decided 2026-08-08; superseded by 6.9 on 2026-09-02**
+
+> **Update (2026-09-02):** the pipeline moved to GitHub Actions
+> (`.github/workflows/enrich.yml`, Phase 6.9) and the Mac launchd agents
+> were disabled. The rest of this section describes the interim
+> Mac-against-production setup it replaced.
 
 **Keep it local, pointed at the production database** — the enrichment
 pipeline still runs as three launchd agents on a personal Mac
@@ -822,9 +828,10 @@ Publication/topic enrichment has been a background daily pipeline since
 Phase 3 widened `Professor` to ~196k. It gates real things: search ranking
 quality (topic/text rank need the data), AI summaries (`insufficient_data`
 when a professor has neither), Phase 7 matching (same), and whether
-`recent_only` can default on. As of 2026-09-01 it runs on GitHub Actions
-(`.github/workflows/enrich.yml`), not only the personal Mac, so it advances
-every day regardless of whether that laptop is on.
+`recent_only` can default on. As of 2026-09-02 it runs **only** on GitHub
+Actions (`.github/workflows/enrich.yml`); the Mac launchd agents are
+disabled, so it advances every day regardless of whether that laptop is on
+and nothing else competes for the shared OpenAlex budget.
 
 - ✅ **Re-measured coverage against production (2026-09-01).** 196,382
   professors; **34.8%** with ≥1 `Publication` (68,424), **47.1%** with ≥1
@@ -841,12 +848,18 @@ every day regardless of whether that laptop is on.
   `DATABASE_URL` + optional OpenAlex/ORCID creds as repo secrets,
   `concurrency: enrich` so runs never overlap, `timeout-minutes: 330`
   under GitHub's 6h cap. The skip-queries + circuit breakers already in
-  each module make a timeout kill a clean resume. The launchd agents on
-  the Mac can stay as a redundant runner or be disabled — either is fine
-  now. **Setup:** add the secrets in the repo's Settings → Secrets and
-  variables → Actions (`DATABASE_URL` required; `OPENALEX_API_KEY`,
-  `OPENALEX_EMAIL`, `ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET` optional but
-  speed it up).
+  each module make a timeout kill a clean resume. **Setup done
+  2026-09-02:** all five secrets added to the repo, first manual run
+  confirmed it reads from Neon (it hit OpenAlex 429s and the circuit
+  breaker stopped it cleanly — the Mac was still spending the same daily
+  budget at the time, which is why the agents below got disabled).
+  **The Mac launchd agents are now disabled** (`launchctl bootout` +
+  plists moved out of `~/Library/LaunchAgents/` to
+  `~/.researchlabfinder-launchd-backup/`; sources still in the repo's
+  `launchd/`). GitHub Actions is the sole runner — the Mac and CI were
+  sharing one OpenAlex key + one Neon DB + one daily request budget and
+  starving each other. Re-enable the Mac only if CI is dropped, not
+  alongside it.
 - **Prioritise enrichment by demand, not uniformly.** Enrich professors in
   the most-searched fields/institutions first (needs the search-term
   logging from 6.8's analytics, or a simple ordering by institution
