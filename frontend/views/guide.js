@@ -55,7 +55,7 @@ export async function renderGuideView(container, _params, query) {
         el(
           "p",
           {},
-          "Results are individual professors (principal investigators), each at one institution — not a curated directory of labs. " +
+          "Every search returns individual professors whose work matches your search terms — not a curated list of labs. " +
             "The data comes from public sources (OpenAlex and ORCID); see the "
         ),
         el("p", {}, el("a", { href: "#/about" }, "About & data provenance"), " page for exactly where each field comes from."
@@ -73,30 +73,35 @@ export async function renderGuideView(container, _params, query) {
         el(
           "p",
           {},
-          "Most professors don't have a public email address on file — that's expected, not a gap in your search. " +
-            "Every result has a contact panel with what is known (a personal or lab site, ORCID) plus two search links: " +
+          "Most professors don't have a public email address on file. " +
+            "Every result has a contact panel with what is known and verified (a personal or lab site, ORCID) plus two search links: " +
             "“Find on Google Scholar” and a search of the institution's own site for the professor's name. " +
-            "Those get you to a page where their real contact details usually live."
+            "Those usually get you to a page where their contact details are listed."
         )
       ),
 
       section(
-        "Writing a first email that gets a reply",
+        "Writing a cold email",
         el(
           "ul",
           {},
-          el("li", {}, "Keep it short — a few sentences. A busy PI skims."),
+          el("li", {}, "Keep it short. PIs get a lot of email and skim most of it."),
           el(
             "li",
             {},
-            "Name a specific paper or project of theirs and say what caught your interest. This is the whole difference between a real email and a mass one."
+            "Name a specific paper or project of theirs and say what part of it you're interested in."
           ),
           el(
             "li",
             {},
-            "Say who you are in one line (year, school, relevant coursework or skills) and what you're actually asking for — a few hours a week this term, a summer position, remote or in person."
+            "Say who you are in a line or two (year, school, relevant coursework or skills) and what you're actually asking for — a few hours a week this term, a summer position, remote or in person."
           ),
-          el("li", {}, "Ask one clear question and make it easy to say yes or no. Attach a short CV if you have one.")
+          el("li", {}, "Ask one clear question and make it easy to say yes or no. Attach a short CV if you have one."),
+          el(
+            "li",
+            {},
+            "The generated draft is a starting point — read it and edit it before sending. If you don't hear back in a week or so feel free to follow-up."
+          )
         )
       ),
 
@@ -105,8 +110,8 @@ export async function renderGuideView(container, _params, query) {
         el(
           "p",
           {},
-          "Signing in lets you save a student profile once (level, coursework, skills, what you're looking for), " +
-            "bookmark professors, and generate a draft email grounded in both your profile and the professor's recent work. " +
+          "Signing in lets you save your student profile once (level, coursework, skills, what you're looking for), " +
+            "bookmark professors, and generate draft emails grounded in both your profile and the professor's recent work. " +
             "The draft is always yours to edit, and you send it yourself — the app never emails anyone on your behalf."
         )
       ),
