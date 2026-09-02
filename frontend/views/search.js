@@ -58,20 +58,16 @@ export function renderSearchView(container) {
     type: "text",
     id: "topic",
     name: "topic",
-    list: "topic-options",
     placeholder: "e.g. neuroscience, or optogenetics",
     autocomplete: "off",
   });
-  const topicOptions = el("datalist", { id: "topic-options" });
   const institutionInput = el("input", {
     type: "text",
     id: "institution",
     name: "institution",
-    list: "institution-options",
     placeholder: "e.g. Stanford",
     autocomplete: "off",
   });
-  const institutionOptions = el("datalist", { id: "institution-options" });
 
   const nameInput = el("input", { type: "text", id: "name", name: "name", placeholder: "e.g. Smith" });
   const textInput = el("input", {
@@ -90,12 +86,12 @@ export function renderSearchView(container) {
   // to filters the search actually supports (a topic plus one location
   // dimension) -- see applyExample below.
   const EXAMPLE_SEARCHES = [
-    { label: "machine learning · Boston", topic: "machine learning", city: "Boston" },
-    { label: "neuroscience · California", topic: "neuroscience", state: "California" },
-    { label: "materials science · Texas", topic: "materials science", state: "Texas" },
-    { label: "robotics · Michigan", topic: "robotics", state: "Michigan" },
-    { label: "marine biology · Florida", topic: "marine biology", state: "Florida" },
-    { label: "climate science · Washington", topic: "climate science", state: "Washington" },
+    { label: "Machine learning · Boston", topic: "Machine learning", city: "Boston" },
+    { label: "Neuroscience · California", topic: "Neuroscience", state: "California" },
+    { label: "Materials science · Texas", topic: "Materials science", state: "Texas" },
+    { label: "Robotics · Michigan", topic: "Robotics", state: "Michigan" },
+    { label: "Marine biology · Florida", topic: "Marine biology", state: "Florida" },
+    { label: "Climate science · Washington", topic: "Climate science", state: "Washington" },
   ];
 
   const examplesEl = el(
@@ -257,6 +253,103 @@ export function renderSearchView(container) {
     )
   );
 
+  // A small custom autocomplete dropdown, replacing the native <datalist>:
+  // datalist popups can't be themed or reliably left-aligned to the input,
+  // and only ever matched one column. This renders our own list directly
+  // under the input; fetchFn decides what to suggest. Returns the <ul> to
+  // drop into the markup next to `input` (inside a `.autocomplete` wrapper).
+  function setupAutocomplete(input, fetchFn) {
+    const listEl = el("ul", { class: "autocomplete-list", hidden: true });
+    let items = [];
+    let activeIndex = -1;
+    let debounceTimer;
+
+    function close() {
+      listEl.hidden = true;
+      activeIndex = -1;
+    }
+
+    function render() {
+      listEl.replaceChildren(
+        ...items.map((text, i) =>
+          el(
+            "li",
+            {
+              class: i === activeIndex ? "active" : null,
+              // mousedown (not click) fires before the input's blur, so the
+              // value is set before the blur handler closes the list.
+              onMousedown: (event) => {
+                event.preventDefault();
+                choose(text);
+              },
+            },
+            text
+          )
+        )
+      );
+      listEl.hidden = items.length === 0;
+    }
+
+    function choose(text) {
+      input.value = text;
+      items = [];
+      close();
+    }
+
+    input.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const value = input.value.trim();
+      if (!value) {
+        items = [];
+        close();
+        return;
+      }
+      debounceTimer = setTimeout(async () => {
+        try {
+          items = await fetchFn(value);
+          activeIndex = -1;
+          render();
+        } catch {
+          // Autocomplete is a convenience, not critical -- fail silently.
+          items = [];
+          close();
+        }
+      }, 200);
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (listEl.hidden || items.length === 0) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        activeIndex = (activeIndex + 1) % items.length;
+        render();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        activeIndex = (activeIndex - 1 + items.length) % items.length;
+        render();
+      } else if (event.key === "Enter" && activeIndex >= 0) {
+        event.preventDefault();
+        choose(items[activeIndex]);
+      } else if (event.key === "Escape") {
+        close();
+      }
+    });
+
+    // Delay so a mousedown on an item still lands before the list hides.
+    input.addEventListener("blur", () => setTimeout(close, 120));
+
+    return listEl;
+  }
+
+  const topicSuggestions = setupAutocomplete(topicInput, async (value) => {
+    const data = await listTopics(value, undefined, 10);
+    return data.topics;
+  });
+  const institutionSuggestions = setupAutocomplete(institutionInput, async (value) => {
+    const data = await listInstitutions(value, 10);
+    return data.institutions;
+  });
+
   const form = el(
     "form",
     { id: "search-form" },
@@ -264,21 +357,14 @@ export function renderSearchView(container) {
       "div",
       { class: "field" },
       el("label", { for: "topic" }, "Research area"),
-      topicInput,
-      topicOptions,
-      el(
-        "p",
-        { class: "hint" },
-        "A broad field (“neuroscience”, “computer science”) or a specific topic " +
-          "(“optogenetics”, “perovskite solar cells”) — both work."
-      )
+      el("div", { class: "autocomplete" }, topicInput, topicSuggestions),
+      el("p", { class: "hint" }, "Broad field or specific method — both work.")
     ),
     el(
       "div",
       { class: "field" },
       el("label", { for: "institution" }, "Institution"),
-      institutionInput,
-      institutionOptions
+      el("div", { class: "autocomplete" }, institutionInput, institutionSuggestions)
     ),
     locationPresetsEl,
     advancedDetails,
@@ -305,37 +391,6 @@ export function renderSearchView(container) {
 
   mount(container, hero, el("div", { class: "search-panel" }, form), statusEl, resultsEl, pagination);
 
-  function setupAutocomplete(input, datalist, fetchFn) {
-    let debounceTimer;
-    function fetchSuggestions() {
-      clearTimeout(debounceTimer);
-      const value = input.value.trim();
-      if (!value) {
-        datalist.replaceChildren();
-        return;
-      }
-      debounceTimer = setTimeout(async () => {
-        try {
-          const options = await fetchFn(value);
-          datalist.replaceChildren(...options.map((name) => el("option", { value: name })));
-        } catch {
-          // Autocomplete is a convenience, not critical -- fail silently.
-        }
-      }, 200);
-    }
-    input.addEventListener("input", fetchSuggestions);
-    return fetchSuggestions;
-  }
-
-  setupAutocomplete(institutionInput, institutionOptions, async (value) => {
-    const data = await listInstitutions(value, 10);
-    return data.institutions;
-  });
-
-  setupAutocomplete(topicInput, topicOptions, async (value) => {
-    const data = await listTopics(value, undefined, 10);
-    return data.topics;
-  });
 
   (async () => {
     try {
