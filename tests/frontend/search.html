@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Search response regression tests</title>
+<h1>Search response regression tests</h1>
+<p>Serve the repository root with <code>python -m http.server</code>, then open
+  <code>/tests/frontend/search.html</code>. Uses the real search view and controlled
+  API responses. No database, network services, or test dependencies required.</p>
+<ol id="test-results"></ol>
+<div id="fixture"></div>
+<script type="module">
+  import { renderSearchView } from "../../frontend/views/search.js";
+
+  const results = document.getElementById("test-results");
+  const fixture = document.getElementById("fixture");
+  let pending = [];
+  let cleanup;
+  let failures = 0;
+
+  const response = (data, status = 200) => ({
+    ok: status === 200,
+    status,
+    text: async () => JSON.stringify(data),
+  });
+
+  // Only search requests are deferred. Auxiliary dropdowns resolve normally.
+  window.fetch = async (url) => {
+    const path = new URL(url, location.href).pathname;
+    if (path === "/api/search") {
+      return new Promise((resolve) => pending.push({ url, resolve }));
+    }
+    const data = {
+      "/api/institution-types": { types: [] },
+      "/api/metro-areas": { areas: [] },
+    }[path];
+    if (!data) throw new Error(`Unexpected request: ${url}`);
+    return response(data);
+  };
+
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const professor = (name, id = 1) => ({ id, professor_name: name, topics: [] });
+  const names = () => [...fixture.querySelectorAll(".result-card h2")].map((el) => el.textContent);
+  const status = () => fixture.querySelector("#status").textContent;
+  const page = () => fixture.querySelector("#page-label").textContent;
+
+  function equal(actual, expected) {
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    }
+  }
+
+  function search(topic) {
+    fixture.querySelector("#topic").value = topic;
+    fixture.querySelector("#search-form").requestSubmit();
+    return pending.at(-1);
+  }
+
+  async function respond(request, rows, error) {
+    request.resolve(response(error ? { detail: error } : { results: rows }, error ? 500 : 200));
+    await flush();
+  }
+
+  async function test(name, run) {
+    const item = document.createElement("li");
+    results.append(item);
+    pending = [];
+    cleanup = renderSearchView(fixture);
+    // Resolve the automatic first-mount search, if this is the first test.
+    if (pending.length) await respond(pending[0], []);
+    try {
+      await run();
+      item.textContent = `PASS: ${name}`;
+    } catch (error) {
+      failures++;
+      item.textContent = `FAIL: ${name}: ${error.message}`;
+    } finally {
+      cleanup();
+      fixture.replaceChildren();
+    }
+  }
+
+  await test("Older success cannot render while the latest search is pending", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(older, [professor("Physics professor")]);
+    equal(names(), []);
+    equal(status(), "Searching...");
+    await respond(latest, [professor("Neuroscience professor")]);
+    equal(names(), ["Neuroscience professor"]);
+  });
+
+  await test("Older success cannot append to newer results or change pagination", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(latest, [professor("Neuroscience professor")]);
+    await respond(older, Array.from({ length: 20 }, (_, i) => professor(`Physics ${i}`, i + 2)));
+    equal(names(), ["Neuroscience professor"]);
+    equal(status(), "1 result on this page.");
+    equal(page(), "Page 1");
+    equal(fixture.querySelector("#next-page").disabled, true);
+  });
+
+  await test("Older failure cannot overwrite successful newer results", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(latest, [professor("Neuroscience professor")]);
+    await respond(older, [], "Old request failed");
+    equal(names(), ["Neuroscience professor"]);
+    equal(status(), "1 result on this page.");
+  });
+
+  await test("Older failure cannot replace the latest loading message", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(older, [], "Old request failed");
+    equal(status(), "Searching...");
+    await respond(latest, [professor("Neuroscience professor")]);
+    equal(names(), ["Neuroscience professor"]);
+  });
+
+  await test("A latest-search error remains visible after an older success", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(latest, [], "Latest request failed");
+    await respond(older, [professor("Physics professor")]);
+    equal(names(), []);
+    equal(status(), "Something went wrong: Latest request failed");
+  });
+
+  await test("A stale page-two response cannot corrupt a new page-one search", async () => {
+    await respond(search("Physics"), Array.from({ length: 20 }, (_, i) => professor(`Physics ${i}`, i + 1)));
+    fixture.querySelector("#next-page").click();
+    const older = pending.at(-1);
+    equal(new URL(older.url, location.href).searchParams.get("page"), "2");
+    const latest = search("Neuroscience");
+    await respond(latest, [professor("Neuroscience professor")]);
+    await respond(older, [professor("Page two physics professor")]);
+    equal(names(), ["Neuroscience professor"]);
+    equal(page(), "Page 1");
+    equal(fixture.querySelector("#prev-page").disabled, true);
+  });
+
+  await test("Returning to search restores only the latest accepted results", async () => {
+    const older = search("Physics");
+    const latest = search("Neuroscience");
+    await respond(latest, [professor("Neuroscience professor")]);
+    await respond(older, [professor("Physics professor")]);
+    cleanup();
+    cleanup = renderSearchView(fixture);
+    equal(names(), ["Neuroscience professor"]);
+    equal(fixture.querySelector("#topic").value, "Neuroscience");
+  });
+
+  const summary = document.createElement("p");
+  summary.id = "summary";
+  summary.textContent = `${results.children.length - failures} passed; ${failures} failed`;
+  results.after(summary);
+</script>
+</html>
