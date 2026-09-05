@@ -1,4 +1,5 @@
 from backend.matching import (
+    PARTIAL_INTEREST_FLOOR,
     POSSIBLE_MATCH,
     STRONG_MATCH,
     STRONG_MATCH_THRESHOLD,
@@ -40,11 +41,33 @@ class TestComputeMatchScore:
         c = candidate(topics=["Robotics and Control Systems"])
         assert compute_match_score(profile, c) == 0
 
-    def test_partial_interest_overlap_is_a_fraction_of_topic_weight(self):
+    def test_partial_interest_overlap_is_floored_not_a_flat_fraction(self):
         profile = {"interests": "robotics, marine biology"}
         c = candidate(topics=["Robotics and Control Systems"])
-        # 1 of 2 interest terms matches -> 50% of the topic component.
-        assert compute_match_score(profile, c) == 50
+        # 1 of 2 interest terms matches -> max(0.5, PARTIAL_INTEREST_FLOOR)
+        # of the topic component, so a strong fit for one listed interest
+        # doesn't read as barely relevant.
+        assert compute_match_score(profile, c) == round(PARTIAL_INTEREST_FLOOR * 100)
+
+    def test_interest_matching_only_the_field_still_scores(self):
+        # The core "no Top Matches on a broad search" fix: "neuroscience" is
+        # a field name, not an OpenAlex topic name, so matching only against
+        # topic names scored this 0. It must match against the field too.
+        profile = {"interests": "neuroscience"}
+        c = candidate(topics=["Functional Brain Connectivity Studies"], fields=["Neuroscience"])
+        assert compute_match_score(profile, c) == 100
+
+    def test_interest_matching_a_subfield_still_scores(self):
+        profile = {"interests": "machine learning"}
+        c = candidate(topics=["Some Specific Topic"], subfields=["Artificial Intelligence and Machine Learning"])
+        assert compute_match_score(profile, c) == 100
+
+    def test_one_matched_interest_of_three_clears_strong_match(self):
+        profile = {"interests": "robotics, marine biology, climate science"}
+        c = candidate(topics=["Robotics and Control Systems"])
+        score = compute_match_score(profile, c)
+        assert score == round(PARTIAL_INTEREST_FLOOR * 100)
+        assert tier_for_score(score) == STRONG_MATCH
 
     def test_city_match_scores_full_location_weight(self):
         profile = {"city": "Boston"}

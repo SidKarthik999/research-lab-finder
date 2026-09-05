@@ -978,15 +978,36 @@ def get_matches(
     cursor.execute(query, all_params)
     columns = [desc.name for desc in cursor.description]
     candidates = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    cursor.close()
 
     if not candidates:
+        cursor.close()
         # Retrieval found nobody at all (a niche interest + a small metro,
         # say) -- an empty list with a reason, not a padded one. See
         # CLAUDE.md Phase 7.
         return {"matches": [], "reason": "no_candidates"}
 
+    # The `topics` array from build_search_query is just topic *names*.
+    # compute_match_score also needs the broader subfield/field labels so a
+    # student who typed "neuroscience" (a field, not a topic name) still
+    # scores as a real match -- one batched query for the whole pool.
+    candidate_ids = [c["id"] for c in candidates]
+    cursor.execute(
+        """
+        SELECT pt.professor_id,
+               ARRAY_AGG(DISTINCT rt.subfield) FILTER (WHERE rt.subfield IS NOT NULL),
+               ARRAY_AGG(DISTINCT rt.field)    FILTER (WHERE rt.field IS NOT NULL)
+        FROM ProfessorTopic pt
+        JOIN ResearchTopic rt ON rt.id = pt.topic_id
+        WHERE pt.professor_id = ANY(%s)
+        GROUP BY pt.professor_id;
+        """,
+        [candidate_ids],
+    )
+    taxonomy = {pid: (subfields or [], fields or []) for pid, subfields, fields in cursor.fetchall()}
+    cursor.close()
+
     for candidate in candidates:
+        candidate["subfields"], candidate["fields"] = taxonomy.get(candidate["id"], ([], []))
         # Same bucketed badge value /api/search computes per row -- carried
         # through combine_match_results so a match card renders identically
         # to a search card apart from the tier/reason.

@@ -977,7 +977,16 @@ model.**
    `Institution.city`/`state` isn't scored as a location mismatch just
    because the data's missing, same "absent beats wrong" convention as
    everywhere else in this project. `tier_for_score()` buckets 0-100 into
-   the three labels.
+   the three labels. **Tuned 2026-09-05** after a first look showed a broad
+   search producing no Top Matches at all: topic overlap now matches an
+   interest term against the candidate's subfield/field labels too
+   (`_candidate_topic_text`), not only OpenAlex topic *names* — "neuroscience"
+   is a field, not a topic name, so name-only matching scored a real
+   neuroscientist 0. Matching *some* of several listed interests is floored
+   at `PARTIAL_INTEREST_FLOOR` (0.6) rather than a flat `matched/total`, and
+   the thresholds dropped (Top 75→70, Strong 50→40). The `/api/me/matches`
+   handler does one batched query for the pool's distinct subfields/fields
+   and attaches them to each candidate before scoring.
 3. **LLM rerank + rationale only — never the score.** `build_match_prompt()`
    (pure) sends the profile plus the scored candidate pool (name,
    institution, location, topics — no publications yet, see below) via
@@ -1055,6 +1064,22 @@ OpenAI call which isn't configured locally).
   sketch wanted those for a more specific rationale. Skipped for this
   pass's scope; would need a batched per-candidate publication fetch
   (`ProfessorPublication`/`Publication`) added to the retrieval step.
+- **Retrieval still uses only the first interest term.** The candidate
+  pool comes from one SQL query on `interests[0]`; scoring compares all
+  terms against each candidate, but a second/third disjoint interest never
+  brings its *own* people into the pool. A "marine biology, robotics"
+  profile gets a marine-biologist pool, and roboticists only appear if
+  they also happen to match marine biology. Fixing it means retrieving
+  once per term and merging — a pure `candidate_filter_variants()` plus a
+  loop in the handler. Deferred until the single-term version's quality is
+  judged in real use.
+- **A broad single-interest search now scores nearly everyone Top Match.**
+  That's arguably correct (they *were* all retrieved because that term is
+  central to their work), and the LLM rerank still orders them and writes
+  distinct reasons — but if more spread is wanted, the lever is folding
+  `build_search_query`'s per-topic `works_count` (`topic_score`, already
+  returned) into the score so a marginal-topic match ranks below a
+  primary one.
 
 ### Rules it inherits from the rest of the project
 

@@ -52,8 +52,8 @@ POSSIBLE_MATCH = "Possible Match"
 # Score (0-100) thresholds for tier_for_score(). Everything below
 # STRONG_MATCH_THRESHOLD still gets POSSIBLE_MATCH -- see the module
 # docstring on why nothing is dropped instead.
-TOP_MATCH_THRESHOLD = 75
-STRONG_MATCH_THRESHOLD = 50
+TOP_MATCH_THRESHOLD = 70
+STRONG_MATCH_THRESHOLD = 40
 
 # compute_match_score()'s two signal weights. Renormalized per-candidate to
 # whichever signals the profile actually has data for (see that function),
@@ -61,6 +61,12 @@ STRONG_MATCH_THRESHOLD = 50
 # never had a chance to earn points on.
 TOPIC_WEIGHT = 70
 LOCATION_WEIGHT = 30
+
+# When a candidate matches at least one of the student's stated interests,
+# the topic fraction never drops below this -- someone who's a strong fit
+# for one of three listed interests has still been found, and shouldn't
+# read as barely relevant just because they don't also cover the other two.
+PARTIAL_INTEREST_FLOOR = 0.6
 
 
 # --- Deterministic scoring (pure) ---
@@ -76,18 +82,39 @@ def _parse_interest_terms(interests_text):
     return [term.strip().lower() for term in re.split(r"[,;]", interests_text) if term.strip()]
 
 
-def _topic_overlap_fraction(interest_terms, topic_names):
-    """Fraction (0.0-1.0) of interest_terms that appear as a substring of
-    at least one of the candidate's topic names. Deliberately simple
-    substring matching, not embeddings/NLP -- the point is a score that's
-    consistent and explainable, not maximally clever."""
-    if not interest_terms or not topic_names:
+def _candidate_topic_text(candidate):
+    """Everything about a candidate's research worth matching an interest
+    term against: the specific OpenAlex topic *names* plus the broader
+    subfield/field labels those roll up into. A student types "neuroscience"
+    or "biology" -- words that almost never appear in an OpenAlex topic name
+    ("Functional Brain Connectivity Studies") but do appear in the field
+    ("Neuroscience"). Retrieval already ILIKE-matches name/field/subfield;
+    scoring has to look at the same text or it badly under-scores real
+    matches (the "no Top Matches even on a broad search" bug this fixes)."""
+    parts = []
+    for key in ("topics", "subfields", "fields"):
+        for value in candidate.get(key) or []:
+            if value:
+                parts.append(value.lower())
+    return " | ".join(parts)
+
+
+def _topic_overlap_fraction(interest_terms, candidate):
+    """0.0-1.0. 0.0 if none of the interest terms appear anywhere in the
+    candidate's topic/subfield/field text; otherwise
+    matched / total_terms, floored at PARTIAL_INTEREST_FLOOR so a strong
+    fit for one of several listed interests still reads as a strong fit.
+    Deliberately simple substring matching, not embeddings/NLP -- the point
+    is a score that's consistent and explainable."""
+    if not interest_terms:
         return 0.0
-    haystack = " | ".join(name.lower() for name in topic_names if name)
+    haystack = _candidate_topic_text(candidate)
     if not haystack:
         return 0.0
-    matches = sum(1 for term in interest_terms if term in haystack)
-    return min(matches / len(interest_terms), 1.0)
+    matched = sum(1 for term in interest_terms if term in haystack)
+    if matched == 0:
+        return 0.0
+    return max(matched / len(interest_terms), PARTIAL_INTEREST_FLOOR)
 
 
 def _location_match_fraction(profile, candidate):
@@ -120,8 +147,8 @@ def compute_match_score(profile, candidate):
     happens."""
     components = []
     interest_terms = _parse_interest_terms(profile.get("interests"))
-    if interest_terms and candidate.get("topics"):
-        components.append((_topic_overlap_fraction(interest_terms, candidate["topics"]), TOPIC_WEIGHT))
+    if interest_terms and _candidate_topic_text(candidate):
+        components.append((_topic_overlap_fraction(interest_terms, candidate), TOPIC_WEIGHT))
     if (profile.get("city") or profile.get("state")) and (candidate.get("city") or candidate.get("state")):
         components.append((_location_match_fraction(profile, candidate), LOCATION_WEIGHT))
 
