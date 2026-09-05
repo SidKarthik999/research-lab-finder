@@ -785,7 +785,8 @@ def get_student_profile(user_id):
     connection = get_connection()
     cursor = connection.cursor()
     query = '''
-    SELECT user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for
+    SELECT user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for,
+           interests, city, state, country_code
     FROM StudentProfile
     WHERE user_id = %s;
     '''
@@ -794,7 +795,7 @@ def get_student_profile(user_id):
     cursor.close()
     return row
 
-def upsert_student_profile(user_id, level=None, school=None, graduation_year=None, coursework=None, skills=None, prior_experience=None, looking_for=None):
+def upsert_student_profile(user_id, level=None, school=None, graduation_year=None, coursework=None, skills=None, prior_experience=None, looking_for=None, interests=None, city=None, state=None, country_code=None):
     connection = get_connection()
     cursor = connection.cursor()
     # Full replace (EXCLUDED, not COALESCE) on conflict -- unlike the
@@ -810,9 +811,13 @@ def upsert_student_profile(user_id, level=None, school=None, graduation_year=Non
         coursework,
         skills,
         prior_experience,
-        looking_for
+        looking_for,
+        interests,
+        city,
+        state,
+        country_code
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (user_id)
     DO UPDATE SET
         level = EXCLUDED.level,
@@ -822,10 +827,20 @@ def upsert_student_profile(user_id, level=None, school=None, graduation_year=Non
         skills = EXCLUDED.skills,
         prior_experience = EXCLUDED.prior_experience,
         looking_for = EXCLUDED.looking_for,
+        interests = EXCLUDED.interests,
+        city = EXCLUDED.city,
+        state = EXCLUDED.state,
+        country_code = EXCLUDED.country_code,
         updated_at = CURRENT_TIMESTAMP
     RETURNING user_id;
     '''
-    cursor.execute(query, (user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for))
+    cursor.execute(
+        query,
+        (
+            user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for,
+            interests, city, state, country_code,
+        ),
+    )
     returned_id = cursor.fetchone()[0]
     connection.commit()
     cursor.close()

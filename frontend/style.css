@@ -1029,6 +1029,49 @@ button.icon-button.delete-icon:hover {
   font-size: 0.8rem;
 }
 
+/* Smart search (Phase 7): a match card is a normal result card plus a tier
+   badge at the top and an AI-written reason line. */
+.match-tier {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.match-tier.tier-top {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.match-tier.tier-strong {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.match-tier.tier-possible {
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.match-reason {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--fg);
+}
+
+.match-reason-label {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .result-card h2 {
   margin: 0 0 0.3rem;
   font-size: 1.15rem;
@@ -1277,6 +1320,14 @@ button.publication-title:hover {
   align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-5);
+}
+
+/* `#pagination` (0,1,0... actually 1,0,0) outweighs the UA `[hidden]`
+   rule, so `pagination.hidden = true` needs this to actually hide -- same
+   fix as .account-menu[hidden] above. Smart search hides pagination since
+   it returns its whole (short) list at once. */
+#pagination[hidden] {
+  display: none;
 }
 
 #page-label {

@@ -304,12 +304,24 @@ class StudentProfileRequest(BaseModel):
     skills: str | None = None
     prior_experience: str | None = None
     looking_for: str | None = None
+    # interests/city/state/country_code (migration 012, Phase 7): the
+    # structured signals professor matching scores against -- see
+    # backend/matching.py. interests is deliberately separate from
+    # looking_for: looking_for is about the ask (hours/week, summer,
+    # remote), interests is the subject matter.
+    interests: str | None = None
+    city: str | None = None
+    state: str | None = None
+    country_code: str | None = None
 
 
 def _profile_public(row):
     if row is None:
         return {}
-    _user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for = row
+    (
+        _user_id, level, school, graduation_year, coursework, skills, prior_experience, looking_for,
+        interests, city, state, country_code,
+    ) = row
     return {
         "level": level,
         "school": school,
@@ -318,6 +330,10 @@ def _profile_public(row):
         "skills": skills,
         "prior_experience": prior_experience,
         "looking_for": looking_for,
+        "interests": interests,
+        "city": city,
+        "state": state,
+        "country_code": country_code,
     }
 
 
@@ -343,6 +359,10 @@ def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
         skills=body.skills,
         prior_experience=body.prior_experience,
         looking_for=body.looking_for,
+        interests=body.interests,
+        city=body.city,
+        state=body.state,
+        country_code=body.country_code,
     )
     return _profile_public(db.get_student_profile(user_id))
 

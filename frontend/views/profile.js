@@ -86,6 +86,37 @@ export async function renderProfileView(container) {
     profile.looking_for || ""
   );
 
+  // interests + location (migration 012, Phase 7): the structured signals
+  // Smart search on the search page ranks professors against. Separate
+  // from "What you're looking for" above -- that's about the ask (hours a
+  // week, summer, remote), this is the subject matter.
+  const interestsInput = el("input", {
+    type: "text",
+    id: "profile-interests",
+    name: "interests",
+    value: profile.interests || "",
+    placeholder: "e.g. computational biology, robotics",
+  });
+  const profileCityInput = el("input", {
+    type: "text",
+    id: "profile-city",
+    name: "city",
+    value: profile.city || "",
+  });
+  const profileStateInput = el("input", {
+    type: "text",
+    id: "profile-state",
+    name: "state",
+    value: profile.state || "",
+  });
+  const profileCountryInput = el("input", {
+    type: "text",
+    id: "profile-country",
+    name: "country_code",
+    value: profile.country_code || "",
+    placeholder: "e.g. US",
+  });
+
   // Only overwrites a field when the resume actually had something for
   // it -- extract_profile_from_resume() (backend/llm.py) returns null for
   // anything it isn't confident about, and this preserves that: a field
@@ -197,6 +228,23 @@ export async function renderProfileView(container) {
     formField("Skills / techniques", skillsInput, "Programming languages, lab techniques, tools you know."),
     formField("Prior research or work experience", priorExperienceInput),
     formField("What you're looking for", lookingForInput, "Used to help write cold emails that actually fit."),
+    formField(
+      "Research interests",
+      interestsInput,
+      "Subjects you want to work in — used by Smart search on the search page to rank professors by fit."
+    ),
+    el(
+      "div",
+      { class: "profile-fields-row" },
+      formField("City", profileCityInput),
+      formField("State", profileStateInput),
+      formField("Country", profileCountryInput)
+    ),
+    el(
+      "p",
+      { class: "hint" },
+      "Where you can realistically work — Smart search ranks nearby professors higher. Leave blank to match anywhere."
+    ),
     errorEl,
     successEl,
     el("button", { type: "submit" }, "Save profile")
@@ -215,6 +263,10 @@ export async function renderProfileView(container) {
         skills: skillsInput.value || null,
         prior_experience: priorExperienceInput.value || null,
         looking_for: lookingForInput.value || null,
+        interests: interestsInput.value || null,
+        city: profileCityInput.value || null,
+        state: profileStateInput.value || null,
+        country_code: profileCountryInput.value || null,
       });
       successEl.textContent = "Profile saved.";
       successEl.hidden = false;
@@ -232,7 +284,7 @@ export async function renderProfileView(container) {
     el(
       "p",
       { class: "hint" },
-      "This information is used to personalize the cold emails you generate — it's never shown to professors directly."
+      "This information personalizes the cold emails you generate and powers Smart search on the search page — it's never shown to professors directly."
     ),
     resumeSection,
     form

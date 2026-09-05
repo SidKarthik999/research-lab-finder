@@ -1,6 +1,6 @@
 # Research Finder — Roadmap
 
-**Last updated:** 2026-09-01
+**Last updated:** 2026-09-04
 
 > **Phase 6 is fully done — the app is live and the core loop works
 > end-to-end for a stranger.** `https://research-finder.com` (Render + Neon),
@@ -15,21 +15,52 @@
 > field/topic "Research area" box, zero-results guidance + a
 > publication-recency line on every card, the lab-vs-professor copy, and a
 > `#/guide` onboarding page (header link + shown once to a new account).
+> A follow-up (2026-09-02) replaced the native `<datalist>` autocomplete
+> with a themed custom dropdown and broadened `/api/topics` to suggest
+> field/subfield names, not just narrow topics.
+>
+> ---
+>
+> ## ⇢ Where we left off (2026-09-05)
+>
+> **Phase 6.8: shipped and live. Phase 6.9: running unattended** — coverage
+> was 34.8%/47.1% (`Publication`/topic) on 2026-09-01; scheduled GitHub
+> Actions runs pushed it to **47.1%/50.1%** by 2026-09-04, confirmed
+> against production (Mac agents disabled — this is CI writing to Neon on
+> its own). Still under half on publications, so `recent_only` stays
+> opt-in; nothing to do but keep checking back.
+>
+> **Phase 7 (professor–student matching): built end-to-end this session,
+> not yet committed.** Design decisions (2026-09-04): a **"Smart search"
+> checkbox on the existing search form**, not a separate page — general
+> search stays untouched; a **deterministic three-tier label** (Top /
+> Strong / Possible Match) computed from real topic-overlap + location
+> signals, **never an LLM-produced percentage** and never something the
+> model decides; **nothing dropped for scoring low** — every retrieved
+> candidate is shown with a tier, since a student still figuring out their
+> interests is who this is for. Built: migration `012` (`StudentProfile.
+> interests`/`city`/`state`/`country_code`), `backend/matching.py`,
+> `GET /api/me/matches`, the profile-form fields, the Smart search checkbox
+> + tier-badge/reason rendering, and `tests/test_matching.py` (38 tests;
+> full suite 2,256 passing). See the Phase 7 section for the full shape and
+> what's still open (caching, publications-in-prompt).
+>
+> **Immediate next step:** commit and deploy Phase 7 — everything is in the
+> working tree on `main`, nothing committed. Then, once live, `OPENAI_API_
+> KEY` is already set in Render so Smart search works immediately; spot-
+> check a few real profiles for hallucination in the reason text, same as
+> was done for AI summaries in Phase 5A.
+>
+> ---
 >
 > **Next up, in order:**
 >
-> 1. **Phase 6.9 — Close the enrichment gap.** Publication/topic coverage is
->    still catching up to the ~196k-professor set: **34.8% have a
->    `Publication`, 47.1% a topic** (re-measured 2026-09-01, up from ~11%).
->    The pipeline now runs on GitHub Actions, not just one Mac
->    (`.github/workflows/enrich.yml`, 2026-09-01). Remaining: prioritise
->    enrichment by demand, then default `recent_only` on once coverage is
->    high enough. This gates search ranking quality, AI summaries, and
->    matching (Phase 7).
-> 2. **Phase 7 — Professor–student matching.** From a student's saved
->    profile + location + interests, an LLM proposes a ranked shortlist of
->    aligned professors with a grounded reason for each — so a signed-in
->    student never starts from a blank form.
+> 1. **Phase 7 — Professor–student matching.** *Built, needs commit +
+>    deploy + a real-data spot-check.* See the Phase 7 section.
+> 2. **Phase 6.9 — Close the enrichment gap.** *Running unattended.*
+>    47.1%/50.1% publication/topic coverage as of 2026-09-04, climbing daily
+>    via GitHub Actions. Revisit prioritise-by-demand and defaulting
+>    `recent_only` on once it's substantially higher.
 > 3. **Phase 4 — Labs, automated.** Still 45 hand-pasted rows.
 > 4. **Phase 5B — Opportunities** (REU / structured programs), then
 >    **Phase 5C — visual redesign**.
@@ -56,7 +87,7 @@ Every phase below is judged against that end-to-end path.
 |---|---|---|
 | `Institution` | ~1,764 | widened in Phase 3 from a fixed top-100 to every US educational institution above a works-count floor (`get_us_institutions`) |
 | `Professor` | ~196,000 | widened in Phase 3 from flat top-50-by-citations to top-cited-*per-field* per institution (`get_professors_at_institution_by_field`), so coverage isn't dominated by whichever field is most-cited overall |
-| `Publication` / `ProfessorTopic` / `ResearchTopic` | catching up | enrichment (topics, publications, ORCID) runs as a scheduled daily pipeline (`launchd/*.plist`) and is still working through the ~44x larger professor set; as of the recency-filter work only ~11% of professors had any `Publication` row yet — not inactivity, just enrichment lag |
+| `Publication` / `ProfessorTopic` / `ResearchTopic` | catching up | enrichment (topics, publications, ORCID) runs daily on GitHub Actions (`.github/workflows/enrich.yml`, since 2026-09-02 — was `launchd/*.plist` on a Mac); still working through the ~44x larger professor set — **34.8% of professors have a `Publication` row, 47.1% a topic** (measured 2026-09-01, was ~11% on 2026-08-08) — not inactivity, just enrichment lag |
 | `Institution.carnegie_classification` | ~78% matched | backfilled from ACE/Indiana University's real Carnegie Classification dataset (not a heuristic), matched by name+city token-Jaccard with a bounded LLM pass for the ambiguous band; left `NULL` rather than guessed when no same-city candidate exists |
 | `Lab` | 45 | unchanged since the hand-extracted pilot; Stanford + Cornell only — still the gap Phase 4 exists to close |
 | `AppUser` / `AuthIdentity` / `StudentProfile` / `EmailDraft` / `Bookmark` | live | accounts, cold-email drafts, and bookmarking shipped in Phase 5A (2026-08-07/08) |
@@ -822,7 +853,7 @@ between "technically usable" and "a stranger gets a result."
 what it does, run a sensible search from an example, and read a result
 without needing anything explained.
 
-### 6.9 — Close the enrichment gap
+### 6.9 — Close the enrichment gap ⇢ **in progress (re-measure + move-off-Mac done 2026-09-02)**
 
 Publication/topic enrichment has been a background daily pipeline since
 Phase 3 widened `Professor` to ~196k. It gates real things: search ranking
@@ -839,7 +870,7 @@ and nothing else competes for the shared OpenAlex budget.
   `Publication` rows. Verdict: steady progress, still under half on
   publications — the enrichment run needs to keep going, and
   `recent_only` stays opt-in until it's substantially higher.
-- ✅ **Moved the pipeline off the personal Mac (2026-09-01).**
+- ✅ **Moved the pipeline off the personal Mac (merged to `main` 2026-09-02, PR #13).**
   `.github/workflows/enrich.yml` runs `src.ingestion.publications` +
   `src.ingestion.topics` daily and adds `src.ingestion.enrich_names`
   weekly, on GitHub Actions — no wrapper scripts (they hardcode a
@@ -860,11 +891,14 @@ and nothing else competes for the shared OpenAlex budget.
   sharing one OpenAlex key + one Neon DB + one daily request budget and
   starving each other. Re-enable the Mac only if CI is dropped, not
   alongside it.
-- **Prioritise enrichment by demand, not uniformly.** Enrich professors in
-  the most-searched fields/institutions first (needs the search-term
-  logging from 6.8's analytics, or a simple ordering by institution
-  works_count as a proxy) so the slices students actually hit fill in
-  before the long tail.
+- **Prioritise enrichment by demand, not uniformly.** *Not started, and
+  bigger than a tweak:* there is no search-term logging, and `Institution`
+  has no `works_count` column, so the "order the backlog by prominence"
+  idea needs either a small migration (store + backfill `works_count`) or
+  a proxy (e.g. professor-count-per-institution as a subquery) plus an
+  `ORDER BY` on `get_professors_without_{publications,topics}()` in
+  `src/database.py` (both currently unordered). Only worth doing while
+  coverage is low; borderline at ~35/47%.
 - **Then default `recent_only` on**, with a result count and an easy
   toggle off — the Phase 3 note said to revisit this "once the pipeline's
   had more uninterrupted time to run," and that's this.
@@ -881,85 +915,172 @@ and the pipeline keeps running whether or not a specific laptop is awake.
 
 ---
 
-## Phase 7 — Professor–student matching
+## Phase 7 — Professor–student matching ⇢ **built end-to-end 2026-09-04/05; not yet committed or deployed**
 
 Search makes a student translate what they want into filters. By the time
 they've signed in and filled a `StudentProfile`, the app already knows their
-interests, level, location, techniques, and what they're looking for — it
-should be able to hand them a ranked shortlist of specific professors with a
-plain-language reason for each, so the starting point is *"here are ten
-people, here's why"* rather than an empty form.
+interests, level, and location — it should be able to hand them a ranked
+shortlist of specific professors with a plain-language reason for each, so
+the starting point is *"here are some people, here's why"* rather than an
+empty form.
+
+**Decided 2026-09-04, superseding the original sketch below in three ways:**
+
+1. **A "Smart search" checkbox on the existing search form, not a separate
+   `#/matches` page.** General search stays exactly as it is (pure SQL, zero
+   latency, works signed out) — that's a deliberate product boundary, kept
+   for its own sake. Checking the box swaps the results source to the
+   matching endpoint instead, blending whatever's typed into the search
+   boxes with the profile rather than replacing it. One form, one results
+   list, not two UIs to maintain.
+2. **A three-tier match label instead of a percentage.** A bare LLM-produced
+   "87% match" is false precision — there's no ground truth behind that
+   number, and it could come back different on a second call for the same
+   profile. Instead: **Top Match / Strong Match / Possible Match**,
+   computed *deterministically* in `compute_match_score()` from real,
+   inspectable signals (stated-interest overlap with a candidate's topics,
+   city/state match), never something the model outputs or influences. The
+   system prompt explicitly forbids the model from mentioning a
+   score/percentage/tier of its own.
+3. **Nothing is dropped for scoring low.** By product decision, every
+   retrieved candidate that reaches the model gets a tier — the lowest
+   being Possible Match, never excluded outright. A high schooler who
+   doesn't yet know what they're looking for is exactly who this feature is
+   for, and cutting weak matches to keep the list "confident" would work
+   against that. (Retrieval finding *zero* candidates at all — a niche
+   interest + a small metro — is the one case that still returns an empty
+   list with a `reason`, same as the summary endpoint's `insufficient_data`.)
 
 This is the professor half of what Phase 5B's "ranked matches across
 professors and opportunities" describes; building it now (professors only)
 means the retrieve-then-rank machinery already exists when Opportunities
-land, and it's the single biggest lever on the top-of-file goal for a
-signed-in student.
+land.
 
 ### Shape
 
 **Two stages — retrieval, then rerank. Never send 196k professors to a
 model.**
 
-1. **Candidate retrieval (SQL, no LLM).** Derive structured filters from the
-   profile — topic/field from stated interests, city/state or a metro
-   radius from location, optionally institution type — and reuse the
-   existing `build_search_query()` path to pull the top ~30–50 candidates by
-   today's relevance ranking (topic `works_count`, then text rank, then
-   recency). A new pure `build_candidate_filters(profile)` in
-   `backend/matching.py` does the profile → params mapping.
-2. **LLM rerank + rationale.** Pass the profile plus those ~30 candidates
-   (name, institution, location, topics, a few recent publication
-   titles/abstracts) to the model via structured output; it returns an
-   ordered subset (say the top 10) each with a 1–2 sentence reason grounded
-   **only** in the supplied topics/publications — *"works on protein-design
-   methods, which matches your stated interest in computational biology;
-   2025 paper on X"* — not invented biography. `build_match_prompt(profile,
-   candidates)` is the pure prompt assembler.
+1. **Candidate retrieval (SQL, no LLM).** `build_candidate_filters(profile,
+   explicit_filters)` (pure, `backend/matching.py`) merges the profile's
+   `interests`/`city`/`state`/`country_code` with whatever the student typed
+   into the search form — explicit filters win, since they're a more direct
+   signal than a saved profile from a different session. Retrieval's SQL
+   `topic` filter only uses the *first* interest term (`build_search_query`'s
+   `topic` param is one ILIKE match, not multi-term) to cast a broad net;
+   the full interest list is what scoring actually compares against. Reuses
+   `build_search_query()` to pull `CANDIDATE_POOL_SIZE` (40) candidates by
+   today's relevance ranking.
+2. **Deterministic scoring.** `compute_match_score(profile, candidate)`
+   (pure) renormalizes across whichever of {topic overlap, location match}
+   *both sides* have data for — a candidate with a blank
+   `Institution.city`/`state` isn't scored as a location mismatch just
+   because the data's missing, same "absent beats wrong" convention as
+   everywhere else in this project. `tier_for_score()` buckets 0-100 into
+   the three labels.
+3. **LLM rerank + rationale only — never the score.** `build_match_prompt()`
+   (pure) sends the profile plus the scored candidate pool (name,
+   institution, location, topics — no publications yet, see below) via
+   structured JSON-schema output; the model selects and orders up to
+   `MAX_MATCHES_RETURNED` (10) with a grounded 1-2 sentence reason each,
+   explicitly told never to output or imply a score/percentage/tier of its
+   own. `combine_match_results()` (pure) merges the model's picks back with
+   each one's already-computed score/tier, dropping any `professor_id` the
+   model didn't actually receive (never trust a generated id) and any
+   duplicate.
+
+### Status (2026-09-05)
+
+**Built end-to-end, uncommitted on `main` in the working tree.** Full suite
+2,256 passing; verified end-to-end against local data (retrieval →
+deterministic scoring → tier → `combine_match_results`, stopping before the
+OpenAI call which isn't configured locally).
+
+**✅ Backend and tests:**
+- Migration `012_student_profile_matching_fields.sql` — `StudentProfile`
+  gained `interests`, `city`, `state`, `country_code`. The existing fields
+  (`level`/`school`/`coursework`/`skills`/`prior_experience`/`looking_for`)
+  are all free text about background/the ask, none of them a clean
+  "what subject" or "where" signal — this is why the original sketch's
+  "the app already knows their interests... and location" wasn't actually
+  true until now. `src/database.py`'s `get_student_profile`/
+  `upsert_student_profile` and `backend/auth.py`'s `/api/me/profile`
+  (`StudentProfileRequest`/`_profile_public`) extended to match.
+- `backend/matching.py` — all of the above, pure functions
+  (`build_candidate_filters`, `compute_match_score`, `tier_for_score`,
+  `build_match_prompt`, `combine_match_results`) plus the impure
+  `generate_matches()` (the actual OpenAI call, not unit-tested, same as
+  `generate_summary()`).
+- `GET /api/me/matches` (`backend/main.py`) — behind `current_user`,
+  requires a saved profile (422 otherwise, same as cold-email), capped at
+  `MATCH_DAILY_LIMIT` (20/day) via the existing `LlmUsage` table
+  (`kind='match'`). Accepts the same filter params `/api/search` does.
+- `tests/test_matching.py` — 38 tests over every pure function, no DB, no
+  network, same pattern as `tests/test_llm.py`.
+
+**✅ Frontend:**
+- **`frontend/views/profile.js`** — `interests` (free text, comma-
+  separated) plus `city`/`state`/`country_code` fields, wired through
+  `PUT /api/me/profile`. The section intro now says the profile also
+  powers Smart search, not just cold emails.
+- **`frontend/views/search.js`** — a "Smart search" checkbox on the
+  existing form (no separate page). Checked, it calls `GET /api/me/matches`
+  with whatever filters are typed instead of `/api/search`; toggling it
+  re-runs immediately. Results render with `renderCard(row, {tier,
+  reason})` — the same card component, plus a coloured tier badge (`.match-
+  tier.tier-{top,strong,possible}`) and an "Why this match (AI-generated):"
+  reason line. Signed-out or no-profile shows an inline nudge (not a
+  silent no-op); 503/429/`no_candidates` each get a specific message.
+  Pagination is hidden in smart mode (one short list, no pages), and
+  `savedSearchState` remembers the mode so back-navigation restores a
+  smart result set correctly.
+- **`combine_match_results`** was widened to pass through the card's
+  display fields (`email`/`website`/`orcid`/`institution_website`/
+  `institution_type`/`last_publication_date`) so a match card is
+  visually identical to a search card apart from the badge and reason;
+  the `/api/me/matches` handler computes `institution_type` per candidate
+  the same way `/api/search` does.
+- **`#pagination[hidden]`** rule added — an ID selector was outweighing the
+  UA `[hidden]` rule, so `pagination.hidden = true` did nothing without
+  it (same fix as `.account-menu[hidden]`).
+
+**Still open:**
+- **No caching.** The original sketch's `matches_json` +
+  `matches_generated_at` (keyed to a profile hash, lazy-regenerate) was
+  dropped from this pass — every call to `/api/me/matches` is a fresh,
+  uncached OpenAI request. `MATCH_DAILY_LIMIT` bounds the cost, but this is
+  worth revisiting once there's real usage to see if it's needed.
+- **No publications in the prompt.** The rerank only sees topics/
+  institution/location, not recent publication titles — the original
+  sketch wanted those for a more specific rationale. Skipped for this
+  pass's scope; would need a batched per-candidate publication fetch
+  (`ProfessorPublication`/`Publication`) added to the retrieval step.
 
 ### Rules it inherits from the rest of the project
 
-- **Absent beats wrong.** A candidate with no enriched topics/publications
-  can still rank on filters but gets no fabricated rationale. The model may
-  return fewer than N. If retrieval finds nothing (niche interest + small
-  metro), return an empty list with a `reason`, not a padded one — same as
-  the summary endpoint's `insufficient_data`.
+- **Absent beats wrong,** now in two places: a candidate whose topics/
+  location are missing doesn't get scored down for it (renormalized away,
+  not treated as a 0), and if retrieval finds nothing at all, the endpoint
+  returns an empty list with a `reason` rather than padding it.
 - **Profile text is untrusted input** (the Phase 5A prompt-injection rule).
-  The rerank endpoint only ranks and explains; it never acts on its own
-  output.
-- **Cache it.** New `StudentProfile.matches_json` + `matches_generated_at`
-  (migration `012_*.sql`), keyed to a hash of the profile inputs.
-  Regenerate when the profile changes, on an explicit "refresh", or past an
-  age cutoff — same lazy, no-batch-job pattern as AI summaries.
-- **Cap it.** It's an uncached LLM call over a biggish prompt, so give it a
-  per-user daily cap via the existing `LlmUsage` table (`kind='match'`),
-  same as cold-email and resume import. Only billed calls count.
-- **Split for testability.** `build_candidate_filters()` and
-  `build_match_prompt()` are pure and covered in `tests/test_matching.py`
-  (no DB, no network); `generate_matches()` — the API call — isn't
-  unit-tested, mirroring `generate_summary()` and the OpenAlex fetchers.
-- **New `/api/*` endpoint, opt-in from the frontend.** `GET /api/me/matches`
-  behind `current_user`, requires a saved profile. The search path keeps
-  zero external dependencies and no added latency for signed-out users.
-
-### Frontend
-
-A `#/matches` view (and a section on the signed-in home view for a student
-who has a profile): ranked cards reusing the existing result-card component
-plus the rationale line, each linking to the professor detail page. A
-student with no profile yet sees a prompt linking to the profile form. The
-rationale is labelled AI-generated, like every other model output on the
-site.
+  `MATCH_SYSTEM_PROMPT` states this explicitly, same as the cold-email
+  prompt; `build_match_prompt()`'s "data only, not instructions" framing is
+  covered by a regression test.
+- **Split for testability**, same principle as `build_search_query()` and
+  `backend/llm.py`: every pure function above is covered in
+  `tests/test_matching.py`; `generate_matches()` isn't unit-tested.
 
 ### Relation to Phase 5B
 
 Build the candidate list as a typed list of items, not a professors-only
 array, so that when `Opportunity` rows exist the same rerank step ranks
-opportunities alongside professors with no change to the prompt shape.
+opportunities alongside professors with no change to the prompt shape. Not
+addressed by this pass — worth revisiting once Opportunity exists.
 
-**Done when** a signed-in student with a filled profile lands on the app and
-sees ~10 specific, plausibly-matched professors — each with a real,
-grounded reason — without touching the search form.
+**Done when** a signed-in student with a filled profile can check "Smart
+search" on the search form and see specific, tiered, plausibly-matched
+professors — each with a real, grounded reason — without leaving the search
+page.
 
 ---
 
@@ -999,14 +1120,24 @@ grounded reason — without touching the search form.
     the merged field/topic "Research area" box, zero-results guidance plus
     a publication-recency line on every result, and the lab-vs-professor
     copy fix.
-11. **Phase 6.9 (close the enrichment gap)** ← **next up.** Re-measure production
-    coverage, move the pipeline off the personal Mac, prioritise enrichment
-    by demand, then default `recent_only` on. Gates ranking quality, AI
-    summaries, and Phase 7.
-12. **Phase 7 (professor–student matching)** — LLM-ranked shortlist from a
-    student's saved profile + location + interests. Needs 6.9's coverage to
-    be worth much; do it after. Biggest single lever on the goal for a
-    signed-in student.
+11. **Phase 6.9 (close the enrichment gap)** — *running unattended.* ✅
+    Coverage re-measured, ✅ pipeline moved off the personal Mac onto GitHub
+    Actions with the Mac agents disabled (2026-09-02); climbing daily on
+    its own since — 47.1%/50.1% publication/topic coverage as of
+    2026-09-04. Remaining: prioritise enrichment by demand, then default
+    `recent_only` on, both once coverage is substantially higher. Gates
+    ranking quality and AI summaries; no longer blocks Phase 7 in practice.
+12. **Phase 7 (professor–student matching)** ← **built end-to-end
+    2026-09-04/05; needs commit + deploy + a real-data spot-check.**
+    LLM-ranked shortlist from a student's saved profile + location +
+    interests, surfaced as a "Smart search" checkbox on the existing search
+    form (not a separate page) with a deterministic Top/Strong/Possible
+    Match tier — never a fabricated percentage. Migration `012`,
+    `backend/matching.py`, `GET /api/me/matches`, the profile-form fields,
+    the checkbox + tier-badge/reason rendering, and 38 tests all done;
+    full suite 2,256 passing. Open: no result caching, no publication
+    titles in the rerank prompt (see the Phase 7 section). Biggest single
+    lever on the goal for a signed-in student.
 13. **Phase 4 (labs, automated)** — more content doesn't help until the
     arriving students can already succeed with what's there (6.8–7).
 14. **Phase 5B (opportunities)** — after Phase 4, or interleaved / promoted

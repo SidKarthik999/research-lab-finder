@@ -60,6 +60,16 @@ from backend.llm import (
     generate_cold_email,
     generate_summary,
 )
+from backend.matching import (
+    CANDIDATE_POOL_SIZE,
+    MatchGenerationNotConfigured,
+    MatchGenerationRefused,
+    build_candidate_filters,
+    combine_match_results,
+    compute_match_score,
+    generate_matches,
+    tier_for_score,
+)
 from backend.sessions import current_user, optional_current_user
 from src import database as db
 from src.database import get_connection
@@ -115,6 +125,11 @@ RECENT_YEARS_CUTOFF = 3
 # (database, not an in-process counter) so it survives a Render free-tier
 # cold start mid-day rather than silently resetting.
 COLD_EMAIL_DAILY_LIMIT = 20
+
+# Same reasoning as COLD_EMAIL_DAILY_LIMIT: a "Smart search" call is an
+# uncached OpenAI request over a ~40-candidate prompt, so nothing else
+# bounds one user (or a script) re-running it in a loop.
+MATCH_DAILY_LIMIT = 20
 
 def build_search_query(
     name=None,
@@ -799,6 +814,14 @@ STUDENT_PROFILE_COLUMNS = [
     "skills",
     "prior_experience",
     "looking_for",
+    # interests/city/state/country_code (migration 012, Phase 7 matching) --
+    # unused by cold-email drafting below, but kept here so this stays the
+    # single source of truth for get_student_profile()'s column order rather
+    # than silently truncating via zip() once the row grew past 8 columns.
+    "interests",
+    "city",
+    "state",
+    "country_code",
 ]
 
 
@@ -897,6 +920,95 @@ def professor_cold_email(professor_id: int, user=Depends(current_user)):
     db.insert_llm_usage(user_id, "cold_email")
     draft_id = db.insert_email_draft(user_id, professor_id, draft_body)
     return {"draft": draft_body, "draft_id": draft_id}
+
+
+@app.get("/api/me/matches")
+@db.with_connection
+def get_matches(
+    # Same filter shape as /api/search -- "Smart search" is that same form
+    # with a checkbox on, not a separate page (see docs/ROADMAP.md Phase 7).
+    # Whatever's filled in here narrows the candidate pool build_
+    # candidate_filters() derives from the student's profile; see that
+    # function's docstring for the precedence rule.
+    text: str | None = None,
+    institution: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    metro: str | None = None,
+    topic: str | None = None,
+    field: str | None = None,
+    institution_type: str | None = None,
+    user=Depends(current_user),
+):
+    user_id = user[0]
+    if db.count_llm_usage_today(user_id, "match") >= MATCH_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've reached today's limit of {MATCH_DAILY_LIMIT} smart searches. Try again tomorrow.",
+        )
+
+    profile_row = db.get_student_profile(user_id)
+    if profile_row is None:
+        # Same "absent beats wrong" call as cold-email drafting -- matching
+        # nothing against an empty profile isn't a real match, it's a
+        # coin flip dressed up as one.
+        raise HTTPException(
+            status_code=422,
+            detail="Complete your student profile before using smart search.",
+        )
+    profile = dict(zip(STUDENT_PROFILE_COLUMNS, profile_row))
+
+    explicit_filters = {
+        "text": text,
+        "institution": institution,
+        "city": city,
+        "state": state,
+        "country": country,
+        "metro": metro,
+        "topic": topic,
+        "field": field,
+        "institution_type": institution_type,
+    }
+    filters = build_candidate_filters(profile, explicit_filters)
+    query, all_params = build_search_query(**filters, page=1, limit=CANDIDATE_POOL_SIZE)
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(query, all_params)
+    columns = [desc.name for desc in cursor.description]
+    candidates = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+
+    if not candidates:
+        # Retrieval found nobody at all (a niche interest + a small metro,
+        # say) -- an empty list with a reason, not a padded one. See
+        # CLAUDE.md Phase 7.
+        return {"matches": [], "reason": "no_candidates"}
+
+    for candidate in candidates:
+        # Same bucketed badge value /api/search computes per row -- carried
+        # through combine_match_results so a match card renders identically
+        # to a search card apart from the tier/reason.
+        candidate["institution_type"] = institution_type_for_classification(
+            candidate.get("carnegie_classification")
+        )
+        candidate["match_score"] = compute_match_score(profile, candidate)
+        candidate["tier"] = tier_for_score(candidate["match_score"])
+
+    try:
+        llm_matches = generate_matches(profile, candidates)
+    except MatchGenerationNotConfigured:
+        # No API call was made, so this doesn't count against the daily cap.
+        raise HTTPException(status_code=503, detail="Smart search is not configured yet.")
+    except MatchGenerationRefused:
+        # A real (billed) API call happened even though generation was
+        # refused -- still counts.
+        db.insert_llm_usage(user_id, "match")
+        raise HTTPException(status_code=502, detail="Couldn't generate matches right now.")
+
+    db.insert_llm_usage(user_id, "match")
+    return {"matches": combine_match_results(candidates, llm_matches)}
 
 
 @app.get("/api/institutions")

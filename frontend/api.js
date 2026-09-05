@@ -194,6 +194,13 @@ export function getBookmarks() {
   return request("/api/me/bookmarks");
 }
 
+// "Smart search" -- an LLM-ranked shortlist from the signed-in student's
+// profile, optionally narrowed by the same filter params /api/search
+// takes. 422 if the account has no saved profile yet; 401 if signed out.
+export function getMatches(filters) {
+  return request(`/api/me/matches${toQueryString(filters)}`);
+}
+
 // --- admin ---
 
 export function getAdminFlags() {

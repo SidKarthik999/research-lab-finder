@@ -10,7 +10,9 @@
 
 import { mount, el } from "../dom.js";
 import {
+  ApiError,
   searchProfessors,
+  getMatches,
   listInstitutions,
   listTopics,
   listInstitutionTypes,
@@ -24,6 +26,7 @@ import {
   institutionTypeBadge,
   recencyLine,
 } from "../professor.js";
+import { getCurrentUser } from "../session.js";
 
 const LIMIT = 20;
 
@@ -49,6 +52,9 @@ export function renderSearchView(container) {
   // the search (which could return different results if the data changed
   // in between, and would defeat the point of "still there" restoration).
   let lastResults = [];
+  // "search" (plain /api/search rows) or "smart" (match rows with a tier +
+  // reason) -- restore has to know which shape lastResults holds.
+  let lastResultsMode = "search";
 
   const institutionTypeSelect = el(
     "select",
@@ -81,6 +87,9 @@ export function renderSearchView(container) {
   const stateInput = el("input", { type: "text", id: "state", name: "state" });
   const countryInput = el("input", { type: "text", id: "country", name: "country" });
   const recentOnlyInput = el("input", { type: "checkbox", id: "recent_only", name: "recent_only" });
+  // No `name` -- it must never land in currentFilters()'s FormData sweep;
+  // whether Smart search is on is read straight off `.checked`.
+  const smartSearchInput = el("input", { type: "checkbox", id: "smart-search" });
 
   // Examples that populate the form and run a real search, so a first-time
   // visitor has something to click instead of a blank form. Each maps only
@@ -368,6 +377,21 @@ export function renderSearchView(container) {
       el("div", { class: "autocomplete" }, institutionInput, institutionSuggestions)
     ),
     locationPresetsEl,
+    el(
+      "div",
+      { class: "checkbox-field" },
+      el(
+        "label",
+        { for: "smart-search" },
+        smartSearchInput,
+        "Smart search — rank by fit to your profile"
+      ),
+      el(
+        "p",
+        { class: "hint" },
+        "Uses your saved research interests and location to rank these professors, each with a match tier and a short AI-written reason. Needs a signed-in account with a filled-out profile."
+      )
+    ),
     advancedDetails,
     el(
       "button",
@@ -418,8 +442,17 @@ export function renderSearchView(container) {
   async function runSearch(page = 1) {
     const requestId = ++searchRequestId;
     currentPage = page;
-    statusEl.textContent = "Searching...";
     resultsEl.replaceChildren();
+
+    if (smartSearchInput.checked) {
+      pagination.hidden = true;
+      statusEl.textContent = "Finding matches…";
+      await runSmartSearch(requestId);
+      return;
+    }
+
+    pagination.hidden = false;
+    statusEl.textContent = "Searching...";
 
     let data;
     try {
@@ -434,8 +467,86 @@ export function renderSearchView(container) {
     // results, pagination, or the results saved when leaving this view.
     if (requestId !== searchRequestId) return;
     lastResults = data.results;
+    lastResultsMode = "search";
     renderResults(data.results);
     updatePagination(data.results.length);
+  }
+
+  // Smart search: the profile-ranked shortlist from GET /api/me/matches.
+  // No pagination -- the endpoint returns the full (already short) list in
+  // one shot. Every failure mode gets a plain, specific message rather than
+  // a raw error, same as the summary/cold-email sections elsewhere.
+  async function runSmartSearch(requestId) {
+    if (!getCurrentUser()) {
+      if (requestId !== searchRequestId) return;
+      statusEl.textContent = "";
+      lastResults = [];
+      lastResultsMode = "smart";
+      resultsEl.replaceChildren(smartSearchNudge("signin"));
+      return;
+    }
+
+    let data;
+    try {
+      data = await getMatches(currentFilters());
+    } catch (err) {
+      if (requestId !== searchRequestId) return;
+      if (err instanceof ApiError && err.status === 422) {
+        statusEl.textContent = "";
+        resultsEl.replaceChildren(smartSearchNudge("profile"));
+      } else if (err instanceof ApiError && err.status === 401) {
+        statusEl.textContent = "";
+        resultsEl.replaceChildren(smartSearchNudge("signin"));
+      } else if (err instanceof ApiError && err.status === 503) {
+        statusEl.textContent = "Smart search isn’t turned on for this site yet.";
+      } else if (err instanceof ApiError && err.status === 429) {
+        statusEl.textContent = err.message;
+      } else {
+        statusEl.textContent = `Something went wrong: ${err.message}`;
+      }
+      return;
+    }
+
+    if (requestId !== searchRequestId) return;
+    lastResults = data.matches || [];
+    lastResultsMode = "smart";
+    renderMatchResults(lastResults, data.reason);
+  }
+
+  function renderMatchResults(matches, reason) {
+    resultsEl.replaceChildren();
+    if (matches.length === 0) {
+      statusEl.textContent =
+        reason === "no_candidates"
+          ? "No professors matched your profile and filters. Try broadening your research interests, or clear a filter."
+          : "No matches found.";
+      return;
+    }
+    statusEl.textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}, ranked by fit to your profile.`;
+    for (const match of matches) {
+      resultsEl.append(renderCard(match, { tier: match.tier, reason: match.reason }));
+    }
+  }
+
+  // Shown in place of results when Smart search is checked but the account
+  // isn't ready for it -- signed out, or signed in with no saved profile.
+  function smartSearchNudge(kind) {
+    if (kind === "signin") {
+      return el(
+        "li",
+        { class: "empty-state-card" },
+        el("p", {}, "Smart search needs an account."),
+        el("p", {}, el("a", { href: "#/signin" }, "Sign in"), " or ", el("a", { href: "#/signup" }, "create one"),
+          ", then fill out your profile — after that, checking this box ranks results by how well they fit you.")
+      );
+    }
+    return el(
+      "li",
+      { class: "empty-state-card" },
+      el("p", {}, "Smart search needs your profile."),
+      el("p", {}, "Add your research interests (and optionally a location) on ",
+        el("a", { href: "#/profile" }, "your profile"), ", then try again.")
+    );
   }
 
   function renderResults(results) {
@@ -482,7 +593,9 @@ export function renderSearchView(container) {
     );
   }
 
-  function renderCard(professor) {
+  // matchInfo is {tier, reason} on a Smart-search card, undefined on a
+  // plain search card -- everything else about the two is identical.
+  function renderCard(professor, matchInfo) {
     const location = [professor.city, professor.state, professor.country_code].filter(Boolean).join(", ");
 
     const publicationsContainer = el("div", { class: "publications", hidden: true });
@@ -499,17 +612,33 @@ export function renderSearchView(container) {
 
     return el(
       "li",
-      { class: "result-card" },
+      { class: matchInfo ? "result-card match-card" : "result-card" },
+      matchInfo
+        ? el("span", { class: `match-tier tier-${tierSlug(matchInfo.tier)}` }, matchInfo.tier)
+        : null,
       el("h2", {}, el("a", { href: `#/professor/${professor.id}` }, professor.professor_name || "Unknown professor")),
       el("p", { class: "meta" }, professor.institution_name || "Institution unknown"),
       location ? el("p", { class: "meta" }, location) : null,
       institutionTypeBadge(professor.institution_type),
       recencyLine(professor.last_publication_date),
+      matchInfo && matchInfo.reason
+        ? el(
+            "p",
+            { class: "match-reason" },
+            el("span", { class: "match-reason-label" }, "Why this match (AI-generated): "),
+            matchInfo.reason
+          )
+        : null,
       topicChips(professor.topics),
       renderContactLine(professor),
       toggleBtn,
       publicationsContainer
     );
+  }
+
+  // "Top Match" -> "top", "Strong Match" -> "strong", "Possible Match" -> "possible".
+  function tierSlug(tier) {
+    return (tier || "").split(" ")[0].toLowerCase() || "possible";
   }
 
   async function togglePublications(button, container, professorId) {
@@ -545,6 +674,10 @@ export function renderSearchView(container) {
     event.preventDefault();
     runSearch(1);
   });
+  // Toggling Smart search re-runs immediately, same as clicking a "Near"
+  // preset -- checking a box that changes the result set but leaving the
+  // old results on screen would just be confusing.
+  smartSearchInput.addEventListener("change", () => runSearch(1));
   prevBtn.addEventListener("click", () => runSearch(currentPage - 1));
   nextBtn.addEventListener("click", () => runSearch(currentPage + 1));
 
@@ -555,7 +688,7 @@ export function renderSearchView(container) {
   // than re-fetching, so a page click + a data change elsewhere can't make
   // "back" show something different from what was actually there.
   if (savedSearchState) {
-    const { filters, page, results, scrollY, advancedOpen } = savedSearchState;
+    const { filters, page, results, mode, scrollY, advancedOpen } = savedSearchState;
     nameInput.value = filters.name;
     textInput.value = filters.text;
     topicInput.value = filters.topic;
@@ -564,6 +697,7 @@ export function renderSearchView(container) {
     stateInput.value = filters.state;
     countryInput.value = filters.country;
     recentOnlyInput.checked = filters.recent_only;
+    smartSearchInput.checked = filters.smart;
     activeMetro = filters.metro;
     advancedDetails.open = advancedOpen;
     // institutionTypeSelect is restored separately, above, once its
@@ -571,8 +705,19 @@ export function renderSearchView(container) {
 
     currentPage = page;
     lastResults = results;
-    renderResults(results);
-    updatePagination(results.length);
+    lastResultsMode = mode;
+    pagination.hidden = mode === "smart";
+    if (mode === "smart" && results.length === 0) {
+      // An empty saved smart result could have been a real "no candidates",
+      // a sign-in/profile nudge, or an error -- rather than reconstruct
+      // which, just re-run it (it re-checks the account state anyway).
+      runSearch(1);
+    } else if (mode === "smart") {
+      renderMatchResults(results);
+    } else {
+      renderResults(results);
+      updatePagination(results.length);
+    }
     // The saved scroll position only makes sense once the restored results
     // have actually given the page the height to scroll to -- results are
     // synchronous above, but the browser needs a paint before scrollTo lands
@@ -594,11 +739,13 @@ export function renderSearchView(container) {
         state: stateInput.value,
         country: countryInput.value,
         recent_only: recentOnlyInput.checked,
+        smart: smartSearchInput.checked,
         institution_type: institutionTypeSelect.value,
         metro: activeMetro,
       },
       page: currentPage,
       results: lastResults,
+      mode: lastResultsMode,
       scrollY: window.scrollY,
       advancedOpen: advancedDetails.open,
     };
