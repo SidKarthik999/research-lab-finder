@@ -10,6 +10,7 @@ from backend.matching import (
     build_match_prompt,
     combine_match_results,
     compute_match_score,
+    matches_cache_key,
     parse_interests,
     serialize_interests,
     tier_for_score,
@@ -306,6 +307,38 @@ class TestCombineMatchResults:
     def test_empty_llm_matches_returns_empty_list(self):
         candidates = [candidate(id=1, match_score=90, tier=TOP_MATCH)]
         assert combine_match_results(candidates, []) == []
+
+
+class TestMatchesCacheKey:
+    def test_same_inputs_same_key(self):
+        p = {"interests": '["Neuroscience"]', "state": "Massachusetts"}
+        assert matches_cache_key(p, {"topic": "robotics"}) == matches_cache_key(p, {"topic": "robotics"})
+
+    def test_different_interests_change_the_key(self):
+        a = matches_cache_key({"interests": '["Neuroscience"]'}, {})
+        b = matches_cache_key({"interests": '["Robotics"]'}, {})
+        assert a != b
+
+    def test_interest_order_changes_the_key(self):
+        # Order matters -- the first interest is the SQL retrieval term.
+        a = matches_cache_key({"interests": ["Neuroscience", "Robotics"]}, {})
+        b = matches_cache_key({"interests": ["Robotics", "Neuroscience"]}, {})
+        assert a != b
+
+    def test_filter_dict_order_does_not_change_the_key(self):
+        a = matches_cache_key({}, {"topic": "robotics", "state": "Texas"})
+        b = matches_cache_key({}, {"state": "Texas", "topic": "robotics"})
+        assert a == b
+
+    def test_case_and_whitespace_are_normalized(self):
+        a = matches_cache_key({"state": "Massachusetts"}, {"topic": "Robotics"})
+        b = matches_cache_key({"state": "  massachusetts "}, {"topic": " ROBOTICS"})
+        assert a == b
+
+    def test_falsy_filter_values_are_ignored_and_none_equals_empty(self):
+        assert matches_cache_key({"interests": ["x"]}, None) == matches_cache_key(
+            {"interests": ["x"]}, {"topic": "", "state": None}
+        )
 
 
 class TestBuildMatchPrompt:

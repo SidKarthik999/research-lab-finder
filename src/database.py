@@ -846,6 +846,37 @@ def upsert_student_profile(user_id, level=None, school=None, graduation_year=Non
     cursor.close()
     return returned_id
 
+def get_matches_cache(user_id):
+    # Smart search result cache (migration 013) -- see get_matches in
+    # backend/main.py. Returns (matches_json, matches_key,
+    # matches_generated_at) or None if the student has no profile row yet.
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        "SELECT matches_json, matches_key, matches_generated_at FROM StudentProfile WHERE user_id = %s;",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    return row
+
+def set_matches_cache(user_id, matches_key, matches_json):
+    # The StudentProfile row always exists by the time this is called
+    # (get_matches requires a saved profile), so this is a plain UPDATE, not
+    # an upsert.
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        UPDATE StudentProfile
+        SET matches_json = %s, matches_key = %s, matches_generated_at = CURRENT_TIMESTAMP
+        WHERE user_id = %s;
+        """,
+        (matches_json, matches_key, user_id),
+    )
+    connection.commit()
+    cursor.close()
+
 def insert_email_draft(user_id, professor_id, body):
     connection = get_connection()
     cursor = connection.cursor()

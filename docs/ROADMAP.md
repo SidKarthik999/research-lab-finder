@@ -1087,12 +1087,26 @@ OpenAI call which isn't configured locally).
   UA `[hidden]` rule, so `pagination.hidden = true` did nothing without
   it (same fix as `.account-menu[hidden]`).
 
+**✅ Speed (2026-09-07)** — Smart search was noticeably slower than plain
+search because it adds a 2-8s OpenAI round-trip the DB path doesn't have.
+Three changes:
+- **Result cache.** Migration `013` adds `StudentProfile.matches_json` /
+  `matches_key` / `matches_generated_at`. `matches_cache_key()` (pure)
+  hashes the profile's interests + location and any typed filters; a repeat
+  request with the same key served within a 7-day TTL returns the stored
+  result with no model call and no `LlmUsage` charge. Editing the profile
+  changes the key; `GET /api/me/matches?refresh=1` forces regeneration.
+  `no_candidates` is cached too. Cache read/write are
+  `db.get_matches_cache` / `set_matches_cache` (plain UPDATE — the
+  profile row always exists by then).
+- **Smaller model call.** All `CANDIDATE_POOL_SIZE` (40) candidates are
+  still scored deterministically, but only the top `LLM_RERANK_POOL_SIZE`
+  (20) by `match_score` go to the model — the rest weren't going to be
+  surfaced. `max_output_tokens` 1500 → 1000.
+- The cap check now runs *after* the cache check, so a cache hit is never
+  rejected with a 429.
+
 **Still open:**
-- **No caching.** The original sketch's `matches_json` +
-  `matches_generated_at` (keyed to a profile hash, lazy-regenerate) was
-  dropped from this pass — every call to `/api/me/matches` is a fresh,
-  uncached OpenAI request. `MATCH_DAILY_LIMIT` bounds the cost, but this is
-  worth revisiting once there's real usage to see if it's needed.
 - **No publications in the prompt.** The rerank only sees topics/
   institution/location, not recent publication titles — the original
   sketch wanted those for a more specific rationale. Skipped for this

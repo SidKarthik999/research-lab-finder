@@ -26,6 +26,7 @@ exactly who this feature is for, and a shorter list because weaker
 candidates got silently cut would work against that.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -39,6 +40,18 @@ from backend.llm import MODEL
 # keep the prompt (and the deterministic scoring pass over every
 # candidate) cheap. Not user-configurable.
 CANDIDATE_POOL_SIZE = 40
+
+# Of the CANDIDATE_POOL_SIZE scored candidates, only this many (the
+# highest match_score) are actually sent to the model to rerank + explain.
+# The rest scored low enough that the model was never going to surface
+# them; dropping them roughly halves the prompt and the generation, which
+# is most of what makes a cache-miss Smart search slow.
+LLM_RERANK_POOL_SIZE = 20
+
+# Smart search result cache (migration 013). A cached result is served
+# instead of regenerating when its key matches and it's younger than this.
+# Editing the profile changes the key; ?refresh=1 forces past it anyway.
+MATCHES_CACHE_TTL_SECONDS = 7 * 24 * 3600
 
 # How many ranked matches to ask the model for -- a ceiling, not a target;
 # build_match_prompt() explicitly tells it to return fewer if fewer
@@ -100,6 +113,27 @@ def serialize_interests(values):
     or None for an empty/absent list so a cleared field actually clears."""
     terms = parse_interests(values)
     return json.dumps(terms) if terms else None
+
+
+def matches_cache_key(profile, explicit_filters=None):
+    """A stable hash of everything that changes a Smart search result: the
+    profile's interests (order matters -- the first is the retrieval term)
+    and location, plus any typed search filters. Case- and
+    whitespace-normalized and filter-order-independent, so the same intent
+    always produces the same key. Used to decide whether the stored result
+    (migration 013) can be served instead of regenerating."""
+    payload = {
+        "interests": [term.strip().lower() for term in parse_interests(profile.get("interests"))],
+        "city": (profile.get("city") or "").strip().lower(),
+        "state": (profile.get("state") or "").strip().lower(),
+        "country_code": (profile.get("country_code") or "").strip().lower(),
+        "filters": {
+            key: str(value).strip().lower()
+            for key, value in sorted((explicit_filters or {}).items())
+            if value
+        },
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
 def _candidate_topic_text(candidate):
@@ -407,7 +441,9 @@ def generate_matches(profile, candidates, max_matches=MAX_MATCHES_RETURNED):
         model=MODEL,
         instructions=MATCH_SYSTEM_PROMPT,
         input=prompt,
-        max_output_tokens=1500,
+        # ~10 matches x a 1-2 sentence reason each fits comfortably; the
+        # smaller cap also shortens the slowest part of a cache-miss.
+        max_output_tokens=1000,
         reasoning={"effort": "none"},
         text={
             "format": {

@@ -13,8 +13,10 @@ LLM -- see backend/llm.py.
 Run from the repo root: uvicorn backend.main:app --reload
 """
 
+import json
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,6 +33,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import ForeignKeyViolation
 from pydantic import BaseModel, EmailStr
@@ -62,12 +65,15 @@ from backend.llm import (
 )
 from backend.matching import (
     CANDIDATE_POOL_SIZE,
+    LLM_RERANK_POOL_SIZE,
+    MATCHES_CACHE_TTL_SECONDS,
     MatchGenerationNotConfigured,
     MatchGenerationRefused,
     build_candidate_filters,
     combine_match_results,
     compute_match_score,
     generate_matches,
+    matches_cache_key,
     tier_for_score,
 )
 from backend.sessions import current_user, optional_current_user
@@ -1001,14 +1007,10 @@ def get_matches(
     topic: str | None = None,
     field: str | None = None,
     institution_type: str | None = None,
+    refresh: bool = Query(False, description="Bypass the cached result and regenerate"),
     user=Depends(current_user),
 ):
     user_id = user[0]
-    if not is_admin_user(user) and db.count_llm_usage_today(user_id, "match") >= MATCH_DAILY_LIMIT:
-        raise HTTPException(
-            status_code=429,
-            detail=f"You've reached today's limit of {MATCH_DAILY_LIMIT} smart searches. Try again tomorrow.",
-        )
 
     profile_row = db.get_student_profile(user_id)
     if profile_row is None:
@@ -1032,6 +1034,28 @@ def get_matches(
         "field": field,
         "institution_type": institution_type,
     }
+
+    # Cache hit: the OpenAI call is the whole reason Smart search is slower
+    # than plain search, so a same-inputs repeat (toggling the checkbox,
+    # going to a professor and back) serves the stored result -- no model
+    # call, no daily-cap charge. Editing the profile changes the key;
+    # ?refresh=1 forces regeneration. See migration 013 / matches_cache_key.
+    cache_key = matches_cache_key(profile, explicit_filters)
+    if not refresh:
+        cached = db.get_matches_cache(user_id)
+        if cached and cached[0] and cached[1] == cache_key and cached[2] is not None:
+            generated_at = cached[2]
+            if generated_at.tzinfo is None:
+                generated_at = generated_at.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - generated_at < timedelta(seconds=MATCHES_CACHE_TTL_SECONDS):
+                return json.loads(cached[0])
+
+    if not is_admin_user(user) and db.count_llm_usage_today(user_id, "match") >= MATCH_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've reached today's limit of {MATCH_DAILY_LIMIT} smart searches. Try again tomorrow.",
+        )
+
     filters = build_candidate_filters(profile, explicit_filters)
     query, all_params = build_search_query(**filters, page=1, limit=CANDIDATE_POOL_SIZE)
 
@@ -1045,8 +1069,11 @@ def get_matches(
         cursor.close()
         # Retrieval found nobody at all (a niche interest + a small metro,
         # say) -- an empty list with a reason, not a padded one. See
-        # CLAUDE.md Phase 7.
-        return {"matches": [], "reason": "no_candidates"}
+        # CLAUDE.md Phase 7. Cached like any other result so a repeat
+        # doesn't re-run the retrieval either.
+        empty = {"matches": [], "reason": "no_candidates"}
+        db.set_matches_cache(user_id, cache_key, json.dumps(empty))
+        return empty
 
     # The `topics` array from build_search_query is just topic *names*.
     # compute_match_score also needs the broader subfield/field labels so a
@@ -1079,8 +1106,13 @@ def get_matches(
         candidate["match_score"] = compute_match_score(profile, candidate)
         candidate["tier"] = tier_for_score(candidate["match_score"])
 
+    # Only the highest-scoring LLM_RERANK_POOL_SIZE go to the model -- the
+    # rest scored too low to be surfaced anyway, and a shorter prompt is a
+    # faster call.
+    pool = sorted(candidates, key=lambda c: c["match_score"], reverse=True)[:LLM_RERANK_POOL_SIZE]
+
     try:
-        llm_matches = generate_matches(profile, candidates)
+        llm_matches = generate_matches(profile, pool)
     except MatchGenerationNotConfigured:
         # No API call was made, so this doesn't count against the daily cap.
         raise HTTPException(status_code=503, detail="Smart search is not configured yet.")
@@ -1091,7 +1123,13 @@ def get_matches(
         raise HTTPException(status_code=502, detail="Couldn't generate matches right now.")
 
     db.insert_llm_usage(user_id, "match")
-    return {"matches": combine_match_results(candidates, llm_matches)}
+    # jsonable_encoder first: a match row carries last_publication_date (a
+    # date), which plain json.dumps can't handle -- and this way the cached
+    # bytes are exactly what FastAPI would have serialized on a miss, so a
+    # hit and a miss return the identical shape.
+    result = jsonable_encoder({"matches": combine_match_results(pool, llm_matches)})
+    db.set_matches_cache(user_id, cache_key, json.dumps(result))
+    return result
 
 
 @app.get("/api/institutions")
