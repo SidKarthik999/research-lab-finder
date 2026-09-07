@@ -667,7 +667,13 @@ upload, uncached, same as email drafting.
   imports their resume once, maybe retries a couple of times, not
   routinely. A usage row is recorded on a real (billed) API call whether it
   succeeds or the model refuses — only the "not configured" case (caught
-  before any API call) doesn't count.
+  before any API call) doesn't count. **The admin account is exempt from
+  all three caps (2026-09-07):** `is_admin_user()` in `backend/admin.py`
+  (reuses `ADMIN_EMAIL`) short-circuits the `>= LIMIT` check in
+  cold-email / matching / resume-import — the caps bound one anonymous
+  user's spend, not the operator's own testing. Usage is still recorded to
+  `LlmUsage`, so admin activity still shows in metrics; only the gate is
+  skipped. The `$20/month` OpenAI alert below is still the backstop.
 - ✅ **Monthly spend alert set (2026-08-09): $20/month** on the OpenAI
   account (Settings → Billing → Limits). Worth noting since it changes what
   this guardrail actually does: as of early 2026, OpenAI's monthly budget

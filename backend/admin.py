@@ -34,3 +34,12 @@ def require_admin(user=Depends(current_user)):
     if not is_admin_email(user[1], ADMIN_EMAIL):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+def is_admin_user(user):
+    """True if this current_user tuple (user[1] is the email) is the single
+    admin account. Used to exempt the operator from the per-user daily LLM
+    caps -- the caps exist to bound one anonymous user's spend, not to get
+    in the operator's way while testing. Usage is still recorded to
+    LlmUsage; only the >= LIMIT gate is skipped."""
+    return is_admin_email(user[1], ADMIN_EMAIL)

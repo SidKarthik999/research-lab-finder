@@ -36,7 +36,7 @@ from psycopg.errors import ForeignKeyViolation
 from pydantic import BaseModel, EmailStr
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.admin import ADMIN_EMAIL, require_admin
+from backend.admin import ADMIN_EMAIL, is_admin_user, require_admin
 from backend.auth import APP_BASE_URL, router as auth_router
 from backend.contact import build_contact_notification_email
 from backend.email import send_email
@@ -922,7 +922,7 @@ def professor_cold_email(professor_id: int, user=Depends(current_user)):
     # user is the raw (id, email, email_verified, name, avatar_url) tuple
     # current_user returns -- same indexing convention as backend/auth.py.
     user_id, _email, _email_verified, user_name, _avatar_url = user
-    if db.count_llm_usage_today(user_id, "cold_email") >= COLD_EMAIL_DAILY_LIMIT:
+    if not is_admin_user(user) and db.count_llm_usage_today(user_id, "cold_email") >= COLD_EMAIL_DAILY_LIMIT:
         raise HTTPException(
             status_code=429,
             detail=f"You've reached today's limit of {COLD_EMAIL_DAILY_LIMIT} email drafts. Try again tomorrow.",
@@ -1004,7 +1004,7 @@ def get_matches(
     user=Depends(current_user),
 ):
     user_id = user[0]
-    if db.count_llm_usage_today(user_id, "match") >= MATCH_DAILY_LIMIT:
+    if not is_admin_user(user) and db.count_llm_usage_today(user_id, "match") >= MATCH_DAILY_LIMIT:
         raise HTTPException(
             status_code=429,
             detail=f"You've reached today's limit of {MATCH_DAILY_LIMIT} smart searches. Try again tomorrow.",

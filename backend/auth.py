@@ -21,7 +21,7 @@ import os
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 
-from backend.admin import ADMIN_EMAIL, is_admin_email
+from backend.admin import ADMIN_EMAIL, is_admin_email, is_admin_user
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
 from backend.llm import (
@@ -390,7 +390,7 @@ def import_resume(file: UploadFile = File(...), user=Depends(current_user)):
     # Save, same as every other AI-generated content in this app: the app
     # drafts, the student decides what actually gets saved.
     user_id = user[0]
-    if db.count_llm_usage_today(user_id, "resume_import") >= RESUME_IMPORT_DAILY_LIMIT:
+    if not is_admin_user(user) and db.count_llm_usage_today(user_id, "resume_import") >= RESUME_IMPORT_DAILY_LIMIT:
         raise HTTPException(
             status_code=429,
             detail=f"You've reached today's limit of {RESUME_IMPORT_DAILY_LIMIT} resume imports. Try again tomorrow.",
