@@ -723,7 +723,11 @@ export function renderSearchView(container) {
     // correctly for content added in the same tick.
     requestAnimationFrame(() => window.scrollTo(0, scrollY));
   } else {
-    runSearch(1);
+    // First visit this session -- no automatic search. The form waits for
+    // an explicit Search (or an example chip / "Near" preset). Pagination
+    // stays hidden until there's a result set to page through.
+    pagination.hidden = true;
+    statusEl.textContent = "Pick a research area, institution, or location above, then Search.";
   }
 
   return function cleanup() {
