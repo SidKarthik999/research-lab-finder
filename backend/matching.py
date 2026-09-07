@@ -62,11 +62,15 @@ STRONG_MATCH_THRESHOLD = 40
 TOPIC_WEIGHT = 70
 LOCATION_WEIGHT = 30
 
-# When a candidate matches at least one of the student's stated interests,
-# the topic fraction never drops below this -- someone who's a strong fit
-# for one of three listed interests has still been found, and shouldn't
-# read as barely relevant just because they don't also cover the other two.
-PARTIAL_INTEREST_FLOOR = 0.6
+# Topic score for a candidate that matches at least ONE stated interest:
+# TOPIC_MATCH_BASE up front, plus TOPIC_COVERAGE_BONUS scaled by the
+# fraction of interests they cover. So matching one of three interests
+# strongly (0.8) still clears Top Match, but covering all three (1.0)
+# still scores higher. A student who lists several interests and finds a
+# great fit for one of them has found a great fit -- coverage is a
+# tiebreaker, not a gate.
+TOPIC_MATCH_BASE = 0.8
+TOPIC_COVERAGE_BONUS = 0.2
 
 
 # --- Deterministic scoring (pure) ---
@@ -117,11 +121,12 @@ def _candidate_topic_text(candidate):
 
 def _topic_overlap_fraction(interest_terms, candidate):
     """0.0-1.0. 0.0 if none of the interest terms appear anywhere in the
-    candidate's topic/subfield/field text; otherwise
-    matched / total_terms, floored at PARTIAL_INTEREST_FLOOR so a strong
-    fit for one of several listed interests still reads as a strong fit.
-    Deliberately simple substring matching, not embeddings/NLP -- the point
-    is a score that's consistent and explainable."""
+    candidate's topic/subfield/field text; otherwise TOPIC_MATCH_BASE plus
+    TOPIC_COVERAGE_BONUS scaled by how many of the interests they cover --
+    so matching one of several listed interests still scores high, with
+    covering more as a tiebreaker on top. Deliberately simple substring
+    matching, not embeddings/NLP -- the point is a score that's consistent
+    and explainable."""
     if not interest_terms:
         return 0.0
     haystack = _candidate_topic_text(candidate)
@@ -130,7 +135,7 @@ def _topic_overlap_fraction(interest_terms, candidate):
     matched = sum(1 for term in interest_terms if term.lower() in haystack)
     if matched == 0:
         return 0.0
-    return max(matched / len(interest_terms), PARTIAL_INTEREST_FLOOR)
+    return TOPIC_MATCH_BASE + TOPIC_COVERAGE_BONUS * (matched / len(interest_terms))
 
 
 def _location_match_fraction(profile, candidate):

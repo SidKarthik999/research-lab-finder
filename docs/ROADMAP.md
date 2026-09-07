@@ -977,16 +977,22 @@ model.**
    `Institution.city`/`state` isn't scored as a location mismatch just
    because the data's missing, same "absent beats wrong" convention as
    everywhere else in this project. `tier_for_score()` buckets 0-100 into
-   the three labels. **Tuned 2026-09-05** after a first look showed a broad
-   search producing no Top Matches at all: topic overlap now matches an
-   interest term against the candidate's subfield/field labels too
-   (`_candidate_topic_text`), not only OpenAlex topic *names* — "neuroscience"
-   is a field, not a topic name, so name-only matching scored a real
-   neuroscientist 0. Matching *some* of several listed interests is floored
-   at `PARTIAL_INTEREST_FLOOR` (0.6) rather than a flat `matched/total`, and
-   the thresholds dropped (Top 75→70, Strong 50→40). The `/api/me/matches`
-   handler does one batched query for the pool's distinct subfields/fields
-   and attaches them to each candidate before scoring.
+   the three labels. **Tuned twice (2026-09-05, 2026-09-07)** after real
+   use kept showing "no Top Matches":
+   - Topic overlap matches an interest term against the candidate's
+     subfield/field labels too (`_candidate_topic_text`), not only
+     OpenAlex topic *names* — "neuroscience" is a field, not a topic name,
+     so name-only matching scored a real neuroscientist 0. The
+     `/api/me/matches` handler does one batched query for the pool's
+     distinct subfields/fields and attaches them per candidate.
+   - The topic score for a candidate that matches ≥1 interest is
+     `TOPIC_MATCH_BASE` (0.8) + `TOPIC_COVERAGE_BONUS` (0.2) × fraction of
+     interests covered — *not* `matched/total`. Covering one of three
+     listed interests strongly is still a strong fit (0.87) and reaches
+     Top Match; covering all three just scores a bit higher. Coverage is a
+     tiebreaker, not a gate — the earlier `matched/total` (even floored)
+     capped a one-of-three match at Strong.
+   - Thresholds: Top 75→70, Strong 50→40.
 3. **LLM rerank + rationale only — never the score.** `build_match_prompt()`
    (pure) sends the profile plus the scored candidate pool (name,
    institution, location, topics — no publications yet, see below) via
