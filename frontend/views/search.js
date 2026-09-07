@@ -674,10 +674,9 @@ export function renderSearchView(container) {
     event.preventDefault();
     runSearch(1);
   });
-  // Toggling Smart search re-runs immediately, same as clicking a "Near"
-  // preset -- checking a box that changes the result set but leaving the
-  // old results on screen would just be confusing.
-  smartSearchInput.addEventListener("change", () => runSearch(1));
+  // Ticking Smart search only changes the mode -- it doesn't run anything
+  // until the next Search click / Enter, so a mis-tick doesn't spend an
+  // LLM call.
   prevBtn.addEventListener("click", () => runSearch(currentPage - 1));
   nextBtn.addEventListener("click", () => runSearch(currentPage + 1));
 
