@@ -24,7 +24,6 @@ from pydantic import BaseModel, EmailStr, Field
 from backend.admin import ADMIN_EMAIL, is_admin_email
 from backend.email import send_email
 from backend.google_auth import GoogleSignInNotConfigured, UnverifiedGoogleEmail, verify_google_id_token
-from backend.rate_limit import check_rate_limit
 from backend.llm import (
     ResumeExtractionFailed,
     ResumeExtractionNotConfigured,
@@ -32,6 +31,8 @@ from backend.llm import (
     extract_profile_from_resume,
     extract_text_from_pdf,
 )
+from backend.matching import parse_interests, serialize_interests
+from backend.rate_limit import check_rate_limit
 from backend.security import hash_password, verify_password
 from backend.sessions import current_user, log_in, log_out
 from backend.tokens import (
@@ -308,8 +309,10 @@ class StudentProfileRequest(BaseModel):
     # structured signals professor matching scores against -- see
     # backend/matching.py. interests is deliberately separate from
     # looking_for: looking_for is about the ask (hours/week, summer,
-    # remote), interests is the subject matter.
-    interests: str | None = None
+    # remote), interests is the subject matter. It's a list now (the
+    # profile page's tag input) -- each term is a real ResearchTopic
+    # name/field/subfield, stored JSON-encoded in the TEXT column.
+    interests: list[str] | None = None
     city: str | None = None
     state: str | None = None
     country_code: str | None = None
@@ -330,7 +333,9 @@ def _profile_public(row):
         "skills": skills,
         "prior_experience": prior_experience,
         "looking_for": looking_for,
-        "interests": interests,
+        # Stored JSON-encoded (or legacy comma text) -> always hand the
+        # frontend a plain list so the tag input can rehydrate its chips.
+        "interests": parse_interests(interests),
         "city": city,
         "state": state,
         "country_code": country_code,
@@ -359,7 +364,7 @@ def update_profile(body: StudentProfileRequest, user=Depends(current_user)):
         skills=body.skills,
         prior_experience=body.prior_experience,
         looking_for=body.looking_for,
-        interests=body.interests,
+        interests=serialize_interests(body.interests),
         city=body.city,
         state=body.state,
         country_code=body.country_code,

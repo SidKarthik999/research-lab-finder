@@ -453,6 +453,68 @@ def list_metro_areas():
     return {"areas": [{"id": metro_id, "label": label} for metro_id, label in METRO_AREA_LABELS.items()]}
 
 
+# Display names for the country codes stored on Institution.country_code.
+# Ingestion is US-only today, so in practice this is just "US" -> "United
+# States"; the rest are here so a future non-US ingest renders a real name
+# instead of a bare code. Anything not listed falls back to the code.
+_COUNTRY_NAMES = {
+    "US": "United States",
+    "CA": "Canada",
+    "GB": "United Kingdom",
+    "AU": "Australia",
+    "DE": "Germany",
+    "FR": "France",
+    "NL": "Netherlands",
+    "CH": "Switzerland",
+    "SE": "Sweden",
+    "JP": "Japan",
+    "CN": "China",
+    "IN": "India",
+    "SG": "Singapore",
+    "IL": "Israel",
+    "KR": "South Korea",
+}
+
+
+@app.get("/api/locations")
+@db.with_connection
+def list_locations(country: str | None = None, state: str | None = None):
+    # Backs the cascading Country -> State/region -> City dropdowns on the
+    # profile page. Every option is a real distinct value from Institution,
+    # so a student can't save a location that doesn't exist in the data and
+    # silently zero out their Smart search matches. `states` is populated
+    # only when `country` is given, `cities` only when both are.
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT DISTINCT country_code FROM Institution "
+        "WHERE country_code IS NOT NULL AND country_code <> '' ORDER BY country_code;"
+    )
+    countries = [{"code": row[0], "name": _COUNTRY_NAMES.get(row[0], row[0])} for row in cursor.fetchall()]
+
+    states = []
+    if country:
+        cursor.execute(
+            "SELECT DISTINCT state FROM Institution "
+            "WHERE country_code = %s AND state IS NOT NULL AND state <> '' ORDER BY state;",
+            [country],
+        )
+        states = [row[0] for row in cursor.fetchall()]
+
+    cities = []
+    if country and state:
+        cursor.execute(
+            "SELECT DISTINCT city FROM Institution "
+            "WHERE country_code = %s AND state = %s AND city IS NOT NULL AND city <> '' ORDER BY city;",
+            [country, state],
+        )
+        cities = [row[0] for row in cursor.fetchall()]
+
+    cursor.close()
+    return {"countries": countries, "states": states, "cities": cities}
+
+
 @app.get("/api/topics")
 @db.with_connection
 def list_topics(

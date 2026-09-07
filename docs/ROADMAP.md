@@ -1028,10 +1028,32 @@ OpenAI call which isn't configured locally).
   network, same pattern as `tests/test_llm.py`.
 
 **✅ Frontend:**
-- **`frontend/views/profile.js`** — `interests` (free text, comma-
-  separated) plus `city`/`state`/`country_code` fields, wired through
-  `PUT /api/me/profile`. The section intro now says the profile also
-  powers Smart search, not just cold emails.
+- **`frontend/views/profile.js`** — `interests` and location, wired
+  through `PUT /api/me/profile`. The section intro now says the profile
+  also powers Smart search, not just cold emails.
+- **Both interests and location are pick-from-the-data now, not free text
+  (2026-09-07).** They kept silently zeroing Smart search: a stray
+  location value (`topic AND location` → nothing), and interest text that
+  didn't literally appear in any topic string.
+  - **Location:** Country → State/region → City `<select>`s populated from
+    `GET /api/locations` (distinct `Institution.country_code`/`state`/
+    `city`; picking a country loads its regions, a region loads its
+    cities). `states` is US-only in practice today but the mechanism is
+    country-scoped for later.
+  - **Interests:** a search-and-pick tag input (`frontend/tagInput.js`,
+    reused-anywhere component). Suggestions come from `/api/topics` (the
+    same broad→narrow ResearchTopic name/field/subfield vocabulary the
+    search page's Research area box uses); Enter/click only ever commits a
+    real suggestion — a typed non-match does nothing. Selected terms show
+    as removable chips. Stored **JSON-encoded** in the existing
+    `StudentProfile.interests` TEXT column (an OpenAlex field like
+    "Biochemistry, Genetics and Molecular Biology" has a comma, so the old
+    comma-join was lossy). `parse_interests()` / `serialize_interests()`
+    in `backend/matching.py` handle list ↔ JSON-string ↔ legacy comma
+    text; `StudentProfileRequest.interests` is `list[str] | None`;
+    `_profile_public` always hands the frontend a plain list.
+  - A previously-saved value that isn't a valid option (location) or valid
+    term (interest) just doesn't rehydrate on next open — pick fresh.
 - **`frontend/views/search.js`** — a "Smart search" checkbox on the
   existing form (no separate page). Checked, it calls `GET /api/me/matches`
   with whatever filters are typed instead of `/api/search`; toggling it

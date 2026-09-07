@@ -72,14 +72,30 @@ PARTIAL_INTEREST_FLOOR = 0.6
 # --- Deterministic scoring (pure) ---
 
 
-def _parse_interest_terms(interests_text):
-    """StudentProfile.interests is one free-text field ("computational
-    biology, robotics") -- split on commas/semicolons into individual
-    terms to compare against a candidate's topic names one at a time.
-    Empty/None returns []."""
-    if not interests_text:
+def parse_interests(raw):
+    """StudentProfile.interests as stored -> a list of term strings, in
+    original case, order preserved. Accepts what the tag-input frontend
+    sends (a list), what's stored in the column now (a JSON array string),
+    and what older profiles stored (free text with comma/semicolon
+    separators). Empty/None -> []."""
+    if raw is None or raw == "":
         return []
-    return [term.strip().lower() for term in re.split(r"[,;]", interests_text) if term.strip()]
+    if isinstance(raw, list):
+        values = raw
+    else:
+        try:
+            parsed = json.loads(raw)
+            values = parsed if isinstance(parsed, list) else [raw]
+        except (json.JSONDecodeError, TypeError):
+            values = re.split(r"[,;]", raw)
+    return [str(v).strip() for v in values if str(v).strip()]
+
+
+def serialize_interests(values):
+    """list of terms -> the JSON string stored in StudentProfile.interests,
+    or None for an empty/absent list so a cleared field actually clears."""
+    terms = parse_interests(values)
+    return json.dumps(terms) if terms else None
 
 
 def _candidate_topic_text(candidate):
@@ -111,7 +127,7 @@ def _topic_overlap_fraction(interest_terms, candidate):
     haystack = _candidate_topic_text(candidate)
     if not haystack:
         return 0.0
-    matched = sum(1 for term in interest_terms if term in haystack)
+    matched = sum(1 for term in interest_terms if term.lower() in haystack)
     if matched == 0:
         return 0.0
     return max(matched / len(interest_terms), PARTIAL_INTEREST_FLOOR)
@@ -146,7 +162,7 @@ def compute_match_score(profile, candidate):
     practice (see its docstring), but is a valid, honest answer if it
     happens."""
     components = []
-    interest_terms = _parse_interest_terms(profile.get("interests"))
+    interest_terms = parse_interests(profile.get("interests"))
     if interest_terms and _candidate_topic_text(candidate):
         components.append((_topic_overlap_fraction(interest_terms, candidate), TOPIC_WEIGHT))
     if (profile.get("city") or profile.get("state")) and (candidate.get("city") or candidate.get("state")):
@@ -196,7 +212,7 @@ def build_candidate_filters(profile, explicit_filters=None):
     filters = {key: value for key, value in explicit_filters.items() if value}
 
     if not filters.get("topic"):
-        interest_terms = _parse_interest_terms(profile.get("interests"))
+        interest_terms = parse_interests(profile.get("interests"))
         if interest_terms:
             filters["topic"] = interest_terms[0]
 
@@ -337,11 +353,15 @@ def _format_profile_for_prompt(profile):
     labels = [
         ("level", "Level"),
         ("school", "School"),
-        ("interests", "Stated interests"),
         ("city", "City"),
         ("state", "State"),
     ]
     lines = [f"{label}: {profile[key]}" for key, label in labels if profile.get(key)]
+    # interests is a stored list/JSON now, not free text -- render it as a
+    # readable comma list rather than dumping the raw stored form.
+    interests = parse_interests(profile.get("interests"))
+    if interests:
+        lines.insert(min(2, len(lines)), f"Stated interests: {', '.join(interests)}")
     return "\n".join(lines) if lines else "(no profile details given)"
 
 

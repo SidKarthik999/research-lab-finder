@@ -433,6 +433,64 @@ main {
   background: var(--surface-2);
 }
 
+/* Tag input (frontend/tagInput.js): selected chips above a search box that
+   only ever commits a real suggestion. Reuses .autocomplete/.autocomplete-list
+   for the dropdown. */
+.tag-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tag-input-chips:empty {
+  display: none;
+}
+
+.tag-input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* Scoped under .tag-chip to out-specify the global button + button:hover
+   rules (gradient bg, hover transform/shadow) -- same reason
+   button.chip-button needs the element-qualified selector. */
+.tag-chip .tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.tag-chip .tag-chip-remove:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: none;
+  box-shadow: none;
+}
+
 label {
   font-size: 0.82rem;
   font-weight: 600;

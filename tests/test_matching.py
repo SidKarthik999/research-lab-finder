@@ -9,8 +9,46 @@ from backend.matching import (
     build_match_prompt,
     combine_match_results,
     compute_match_score,
+    parse_interests,
+    serialize_interests,
     tier_for_score,
 )
+
+
+class TestParseInterests:
+    def test_list_passes_through_trimmed(self):
+        assert parse_interests(["Neuroscience", " Robotics "]) == ["Neuroscience", "Robotics"]
+
+    def test_json_array_string_is_parsed(self):
+        assert parse_interests('["Neuroscience", "Robotics"]') == ["Neuroscience", "Robotics"]
+
+    def test_legacy_comma_string_still_works(self):
+        assert parse_interests("neuroscience, robotics; genomics") == ["neuroscience", "robotics", "genomics"]
+
+    def test_a_term_containing_a_comma_survives_json_but_not_legacy(self):
+        # OpenAlex field names like "Biochemistry, Genetics and Molecular
+        # Biology" have commas -- JSON storage keeps them whole; that's the
+        # whole reason interests moved off comma-joined free text.
+        assert parse_interests('["Biochemistry, Genetics and Molecular Biology"]') == [
+            "Biochemistry, Genetics and Molecular Biology"
+        ]
+
+    def test_empty_and_none_give_empty_list(self):
+        assert parse_interests(None) == []
+        assert parse_interests("") == []
+        assert parse_interests([]) == []
+        assert parse_interests("  ") == []
+
+
+class TestSerializeInterests:
+    def test_list_becomes_json_string_that_round_trips(self):
+        raw = serialize_interests(["Neuroscience", "Robotics"])
+        assert parse_interests(raw) == ["Neuroscience", "Robotics"]
+
+    def test_empty_or_none_serializes_to_none_so_a_cleared_field_clears(self):
+        assert serialize_interests([]) is None
+        assert serialize_interests(None) is None
+        assert serialize_interests(["  "]) is None
 
 
 def candidate(id=1, professor_name="Ada Lovelace", institution_name="Test University",
@@ -107,6 +145,17 @@ class TestComputeMatchScore:
         profile = {"interests": "robotics"}
         c = candidate(topics=None)
         assert compute_match_score(profile, c) == 0
+
+    def test_interests_as_a_list_score_the_same_as_the_string_form(self):
+        c = candidate(topics=["Robotics and Control Systems"])
+        assert compute_match_score({"interests": ["robotics"]}, c) == compute_match_score(
+            {"interests": "robotics"}, c
+        )
+
+    def test_interests_stored_as_a_json_string_are_scored(self):
+        profile = {"interests": '["Neuroscience"]'}
+        c = candidate(topics=["Functional Brain Connectivity Studies"], fields=["Neuroscience"])
+        assert compute_match_score(profile, c) == 100
 
 
 class TestTierForScore:

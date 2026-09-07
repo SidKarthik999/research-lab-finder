@@ -87,6 +87,13 @@ export function listMetroAreas() {
   return request("/api/metro-areas");
 }
 
+// Cascading location options for the profile page, all drawn from real
+// Institution rows. No args -> countries only; country -> + its states;
+// country + state -> + its cities.
+export function listLocations(country, state) {
+  return request(`/api/locations${toQueryString({ country, state })}`);
+}
+
 // --- professors ---
 
 export function getProfessor(id) {

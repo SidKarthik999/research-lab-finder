@@ -6,7 +6,16 @@
 // one long scroll mixing "things I saved" with "my own info".
 
 import { el, mount } from "../dom.js";
-import { ApiError, getProfile, importResume, updateName, updateProfile } from "../api.js";
+import {
+  ApiError,
+  getProfile,
+  importResume,
+  listLocations,
+  listTopics,
+  updateName,
+  updateProfile,
+} from "../api.js";
+import { createTagInput } from "../tagInput.js";
 import { joinName, splitName } from "../name.js";
 import { getCurrentUser, setCurrentUser } from "../session.js";
 
@@ -90,31 +99,102 @@ export async function renderProfileView(container) {
   // Smart search on the search page ranks professors against. Separate
   // from "What you're looking for" above -- that's about the ask (hours a
   // week, summer, remote), this is the subject matter.
-  const interestsInput = el("input", {
-    type: "text",
-    id: "profile-interests",
-    name: "interests",
-    value: profile.interests || "",
-    placeholder: "e.g. computational biology, robotics",
+  //
+  // A search-and-pick tag input, not free text: every value must be a real
+  // ResearchTopic name/field/subfield (same suggestions the search page's
+  // Research area box uses), so a saved interest is always something
+  // matching can actually match. profile.interests is an array now.
+  const interestsTagInput = createTagInput({
+    initial: Array.isArray(profile.interests) ? profile.interests : [],
+    placeholder: "Search a field, subfield, or topic…",
+    fetchSuggestions: async (q) => {
+      const { topics } = await listTopics(q, undefined, 10);
+      return topics;
+    },
   });
-  const profileCityInput = el("input", {
-    type: "text",
-    id: "profile-city",
-    name: "city",
-    value: profile.city || "",
+  // Cascading Country -> State/region -> City dropdowns, populated from
+  // real Institution locations (GET /api/locations) so a student can't
+  // save a value that doesn't exist in the data. Options load after mount
+  // (populateLocationSelects below); until then each shows a placeholder.
+  const countrySelect = el(
+    "select",
+    { id: "profile-country" },
+    el("option", { value: "" }, "Not specified")
+  );
+  const stateSelect = el(
+    "select",
+    { id: "profile-state", disabled: true },
+    el("option", { value: "" }, "Select a country first")
+  );
+  const citySelect = el(
+    "select",
+    { id: "profile-city", disabled: true },
+    el("option", { value: "" }, "Select a state / region first")
+  );
+
+  async function loadStateOptions(country, selected) {
+    stateSelect.disabled = !country;
+    citySelect.disabled = true;
+    citySelect.replaceChildren(el("option", { value: "" }, "Select a state / region first"));
+    if (!country) {
+      stateSelect.replaceChildren(el("option", { value: "" }, "Select a country first"));
+      return;
+    }
+    let states = [];
+    try {
+      ({ states } = await listLocations(country));
+    } catch {
+      // Non-critical -- leave the dropdown empty rather than blocking the form.
+    }
+    stateSelect.replaceChildren(
+      el("option", { value: "" }, states.length ? "Any state / region" : "No regions on file"),
+      ...states.map((s) => el("option", { value: s }, s))
+    );
+    if (selected && states.includes(selected)) stateSelect.value = selected;
+  }
+
+  async function loadCityOptions(country, state, selected) {
+    const ready = Boolean(country && state);
+    citySelect.disabled = !ready;
+    if (!ready) {
+      citySelect.replaceChildren(el("option", { value: "" }, "Select a state / region first"));
+      return;
+    }
+    let cities = [];
+    try {
+      ({ cities } = await listLocations(country, state));
+    } catch {
+      // Non-critical.
+    }
+    citySelect.replaceChildren(
+      el("option", { value: "" }, cities.length ? "Any city" : "No cities on file"),
+      ...cities.map((c) => el("option", { value: c }, c))
+    );
+    if (selected && cities.includes(selected)) citySelect.value = selected;
+  }
+
+  async function populateLocationSelects() {
+    let countries = [];
+    try {
+      ({ countries } = await listLocations());
+    } catch {
+      return; // leave "Not specified" as the only option
+    }
+    countrySelect.replaceChildren(
+      el("option", { value: "" }, "Not specified"),
+      ...countries.map((c) => el("option", { value: c.code }, c.name))
+    );
+    if (profile.country_code) countrySelect.value = profile.country_code;
+    await loadStateOptions(countrySelect.value, profile.state);
+    await loadCityOptions(countrySelect.value, stateSelect.value, profile.city);
+  }
+
+  countrySelect.addEventListener("change", () => {
+    loadStateOptions(countrySelect.value);
+    loadCityOptions(countrySelect.value, "");
   });
-  const profileStateInput = el("input", {
-    type: "text",
-    id: "profile-state",
-    name: "state",
-    value: profile.state || "",
-  });
-  const profileCountryInput = el("input", {
-    type: "text",
-    id: "profile-country",
-    name: "country_code",
-    value: profile.country_code || "",
-    placeholder: "e.g. US",
+  stateSelect.addEventListener("change", () => {
+    loadCityOptions(countrySelect.value, stateSelect.value);
   });
 
   // Only overwrites a field when the resume actually had something for
@@ -230,20 +310,20 @@ export async function renderProfileView(container) {
     formField("What you're looking for", lookingForInput, "Used to help write cold emails that actually fit."),
     formField(
       "Research interests",
-      interestsInput,
-      "Subjects you want to work in — used by Smart search on the search page to rank professors by fit."
+      interestsTagInput.element,
+      "Type to search, then pick from the list. Add a broad field (“Neuroscience”) or a specific topic (“Optogenetics”) — Smart search on the search page ranks professors by how well they match these."
     ),
     el(
       "div",
       { class: "profile-fields-row" },
-      formField("City", profileCityInput),
-      formField("State", profileStateInput),
-      formField("Country", profileCountryInput)
+      formField("Country", countrySelect),
+      formField("State / region", stateSelect),
+      formField("City", citySelect)
     ),
     el(
       "p",
       { class: "hint" },
-      "Where you can realistically work — Smart search ranks nearby professors higher. Leave blank to match anywhere."
+      "Where you can realistically work — Smart search ranks nearby professors higher. Pick a country to narrow the region list, and a region to narrow the cities. Leave any level blank to match anywhere within the one above."
     ),
     errorEl,
     successEl,
@@ -263,10 +343,10 @@ export async function renderProfileView(container) {
         skills: skillsInput.value || null,
         prior_experience: priorExperienceInput.value || null,
         looking_for: lookingForInput.value || null,
-        interests: interestsInput.value || null,
-        city: profileCityInput.value || null,
-        state: profileStateInput.value || null,
-        country_code: profileCountryInput.value || null,
+        interests: interestsTagInput.getValues(),
+        city: citySelect.value || null,
+        state: stateSelect.value || null,
+        country_code: countrySelect.value || null,
       });
       successEl.textContent = "Profile saved.";
       successEl.hidden = false;
@@ -289,4 +369,9 @@ export async function renderProfileView(container) {
     resumeSection,
     form
   );
+
+  // Fills the location dropdowns and re-selects the student's saved
+  // country/state/city -- runs after mount so the form is on screen
+  // immediately rather than waiting on three sequential requests.
+  populateLocationSelects();
 }
