@@ -1,6 +1,6 @@
 # Research Finder — Roadmap
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-08
 
 > **Phase 6 is fully done — the app is live and the core loop works
 > end-to-end for a stranger.** `https://research-finder.com` (Render + Neon),
@@ -21,46 +21,49 @@
 >
 > ---
 >
-> ## ⇢ Where we left off (2026-09-05)
+> ## ⇢ Where we left off (2026-09-08)
 >
-> **Phase 6.8: shipped and live. Phase 6.9: running unattended** — coverage
-> was 34.8%/47.1% (`Publication`/topic) on 2026-09-01; scheduled GitHub
-> Actions runs pushed it to **47.1%/50.1%** by 2026-09-04, confirmed
-> against production (Mac agents disabled — this is CI writing to Neon on
-> its own). Still under half on publications, so `recent_only` stays
-> opt-in; nothing to do but keep checking back.
+> **Phase 7 (professor–student matching): committed and deployed.** Built
+> end-to-end 2026-09-04/05, then committed + iterated on `main` 2026-09-05
+> through 2026-09-08 (`b4d1241` … `7c1b6b0`): the initial "Smart search"
+> checkbox, two scoring re-tunes (`a2bd78d`, `5920f3f` — was too strict, no
+> Top Matches on broad searches), interests + location turned into
+> pick-from-the-data inputs (`03580e4`), the admin account exempted from the
+> per-user LLM caps (`1fcd3e9`), a result cache + smaller model call for
+> speed (`81d3bc8`), and Smart search / first-load no longer auto-running a
+> search (`75d900f`, `7c1b6b0`). `render.yaml`'s `autoDeploy` means each push
+> to `main` is live; `OPENAI_API_KEY` is set in Render so it works in
+> production now. See the Phase 7 section for the full shape and the
+> follow-ups still open — the first of which is the real-data spot-check of
+> the AI-written reason text for hallucination, same as was done for AI
+> summaries in Phase 5A. Not yet done.
 >
-> **Phase 7 (professor–student matching): built end-to-end this session,
-> not yet committed.** Design decisions (2026-09-04): a **"Smart search"
-> checkbox on the existing search form**, not a separate page — general
-> search stays untouched; a **deterministic three-tier label** (Top /
-> Strong / Possible Match) computed from real topic-overlap + location
-> signals, **never an LLM-produced percentage** and never something the
-> model decides; **nothing dropped for scoring low** — every retrieved
-> candidate is shown with a tier, since a student still figuring out their
-> interests is who this is for. Built: migration `012` (`StudentProfile.
-> interests`/`city`/`state`/`country_code`), `backend/matching.py`,
-> `GET /api/me/matches`, the profile-form fields, the Smart search checkbox
-> + tier-badge/reason rendering, and `tests/test_matching.py` (38 tests;
-> full suite 2,256 passing). See the Phase 7 section for the full shape and
-> what's still open (caching, publications-in-prompt).
->
-> **Immediate next step:** commit and deploy Phase 7 — everything is in the
-> working tree on `main`, nothing committed. Then, once live, `OPENAI_API_
-> KEY` is already set in Render so Smart search works immediately; spot-
-> check a few real profiles for hallucination in the reason text, same as
-> was done for AI summaries in Phase 5A.
+> **Phase 6.9: topic-coverage stall found and fixed (2026-09-08).**
+> Publication coverage kept climbing (47.1% → higher) but **topic coverage
+> flatlined at ~50.1% from 2026-09-04 on**. Cause: `publications` and
+> `topics` run back-to-back in one `enrich.yml` job sharing OpenAlex's
+> single ~10k-request/day budget (it only refreshes once per day), and
+> `publications` runs first — it spent the entire budget (exactly 10,000
+> professors every run) and the `topics` step then tripped its
+> consecutive-failure circuit breaker within ~30s having processed **zero**
+> professors, every day. Fix (`6a766f6`): `ingest_all_publications()` gained
+> a `max_professors` cap (env `PUBLICATIONS_MAX_PROFESSORS_PER_RUN`, unset =
+> no cap for local runs); `enrich.yml` sets it to `5000` so ~half the daily
+> budget is left for `topics`. Verify on the next few scheduled runs that
+> `topics` is processing professors again and coverage resumes climbing;
+> tune the `5000` if OpenAlex's ceiling moves.
 >
 > ---
 >
 > **Next up, in order:**
 >
-> 1. **Phase 7 — Professor–student matching.** *Built, needs commit +
->    deploy + a real-data spot-check.* See the Phase 7 section.
-> 2. **Phase 6.9 — Close the enrichment gap.** *Running unattended.*
->    47.1%/50.1% publication/topic coverage as of 2026-09-04, climbing daily
->    via GitHub Actions. Revisit prioritise-by-demand and defaulting
->    `recent_only` on once it's substantially higher.
+> 1. **Phase 6.9 — Close the enrichment gap.** *Running unattended; topic
+>    stall fixed 2026-09-08 — needs a look on the next runs to confirm it
+>    took.* Then revisit prioritise-by-demand and defaulting `recent_only`
+>    on once coverage is substantially higher.
+> 2. **Phase 7 — Professor–student matching.** *Shipped and live.* Left:
+>    the real-data hallucination spot-check, publications in the rerank
+>    prompt, and multi-term retrieval — see the Phase 7 "Still open" list.
 > 3. **Phase 4 — Labs, automated.** Still 45 hand-pasted rows.
 > 4. **Phase 5B — Opportunities** (REU / structured programs), then
 >    **Phase 5C — visual redesign**.
@@ -859,7 +862,7 @@ between "technically usable" and "a stranger gets a result."
 what it does, run a sensible search from an example, and read a result
 without needing anything explained.
 
-### 6.9 — Close the enrichment gap ⇢ **in progress (re-measure + move-off-Mac done 2026-09-02)**
+### 6.9 — Close the enrichment gap ⇢ **in progress (re-measure + move-off-Mac done 2026-09-02; topic stall fixed 2026-09-08)**
 
 Publication/topic enrichment has been a background daily pipeline since
 Phase 3 widened `Professor` to ~196k. It gates real things: search ranking
@@ -897,6 +900,24 @@ and nothing else competes for the shared OpenAlex budget.
   sharing one OpenAlex key + one Neon DB + one daily request budget and
   starving each other. Re-enable the Mac only if CI is dropped, not
   alongside it.
+- ✅ **Fixed the topic-coverage stall (2026-09-08, `6a766f6`).**
+  Publication coverage kept climbing but **topic coverage was flat at
+  ~50.1% from 2026-09-04 on**. `publications` and `topics` run
+  back-to-back in one `enrich.yml` job and share OpenAlex's single
+  request budget, which only refreshes once per day and — for this
+  key/setup — tops out at ~10,000 professors/day (every recent run
+  processed *exactly* 10,000, then got sustained 429s). `publications`
+  runs first, spent the whole budget, and the `topics` step then tripped
+  its 5-consecutive-failure circuit breaker within ~30s having processed
+  **zero** professors, every single day. Fix: `ingest_all_publications()`
+  takes a `max_professors` cap (env `PUBLICATIONS_MAX_PROFESSORS_PER_RUN`;
+  unset = uncapped, so local one-off runs are unchanged), and
+  `enrich.yml`'s Publications step sets it to `5000` so roughly half the
+  daily budget is left for `topics`. **To confirm it took:** check the
+  next 2–3 scheduled `Enrich` runs' Topics step actually logs
+  `Inserted N topics for …` lines (it was logging none), and that topic
+  coverage starts moving again. Tune the `5000` if the ~10k ceiling
+  shifts — it's one line in the workflow.
 - **Prioritise enrichment by demand, not uniformly.** *Not started, and
   bigger than a tweak:* there is no search-term logging, and `Institution`
   has no `works_count` column, so the "order the backlog by prominence"
@@ -921,7 +942,7 @@ and the pipeline keeps running whether or not a specific laptop is awake.
 
 ---
 
-## Phase 7 — Professor–student matching ⇢ **built end-to-end 2026-09-04/05; not yet committed or deployed**
+## Phase 7 — Professor–student matching ⇢ **shipped and live (committed + deployed 2026-09-05 → 2026-09-08); follow-ups open**
 
 Search makes a student translate what they want into filters. By the time
 they've signed in and filled a `StudentProfile`, the app already knows their
@@ -1010,12 +1031,22 @@ model.**
    model didn't actually receive (never trust a generated id) and any
    duplicate.
 
-### Status (2026-09-05)
+### Status (updated 2026-09-08)
 
-**Built end-to-end, uncommitted on `main` in the working tree.** Full suite
-2,256 passing; verified end-to-end against local data (retrieval →
-deterministic scoring → tier → `combine_match_results`, stopping before the
-OpenAI call which isn't configured locally).
+**Committed and deployed.** Built end-to-end 2026-09-04/05, then committed
+and iterated on `main` 2026-09-05 → 2026-09-08 (`b4d1241` … `7c1b6b0`);
+`render.yaml`'s `autoDeploy` means every push is live, and `OPENAI_API_KEY`
+is set in Render, so Smart search works in production now. Iterations since
+first commit: two scoring re-tunes (`a2bd78d` too strict → no Top Matches on
+broad searches; `5920f3f` still only Strong Matches — folded into the
+"Deterministic scoring" section below), interests + location turned into
+pick-from-the-data inputs (`03580e4` — see the Frontend section), the admin
+account exempted from the per-user LLM caps (`1fcd3e9` — see Phase 6.4), a
+result cache + smaller model call for speed (`81d3bc8` — see the Speed
+section), and Smart search / first page load no longer auto-running a search
+(`75d900f`, `7c1b6b0`). Full suite was 2,256 passing at first commit.
+**Not yet done:** the real-data spot-check of the AI-written `reason` text
+for hallucination, same as was done for AI summaries in Phase 5A.
 
 **✅ Backend and tests:**
 - Migration `012_student_profile_matching_fields.sql` — `StudentProfile`
@@ -1107,6 +1138,12 @@ Three changes:
   rejected with a 429.
 
 **Still open:**
+- **Real-data hallucination spot-check not done.** The `reason` text is
+  model-written and shown to students; run a handful of real profiles
+  through `/api/me/matches` in production and read every `reason` for
+  invented detail, same check done for AI summaries in Phase 5A. The
+  `MATCH_SYSTEM_PROMPT` grounding rules are the defense — this confirms
+  they hold.
 - **No publications in the prompt.** The rerank only sees topics/
   institution/location, not recent publication titles — the original
   sketch wanted those for a more specific rationale. Skipped for this
