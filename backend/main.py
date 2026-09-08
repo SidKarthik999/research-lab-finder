@@ -814,6 +814,11 @@ def admin_metrics(admin=Depends(require_admin), refresh: bool = Query(False)):
         "ai_usage": db.get_ai_usage_metrics(),
         "bookmarks": db.get_bookmark_metrics(),
         "data_coverage": db.get_data_coverage_metrics(),
+        # Wall-clock time this payload was actually computed -- the dashboard
+        # shows it as "last updated" so a stale cached copy is visible as
+        # such. Distinct from fetched_at above, which is a monotonic clock
+        # for TTL math only and isn't a real timestamp.
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     _admin_metrics_cache["value"] = metrics
     _admin_metrics_cache["fetched_at"] = now

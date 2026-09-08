@@ -350,6 +350,16 @@ function renderFlagsSection(container, flags) {
   render();
 }
 
+// metrics.generated_at is the wall-clock time the backend actually computed
+// the payload (see admin_metrics in backend/main.py) -- which, on a cache
+// hit, can be up to the cache TTL (~15 min) ago. Shown so a stale copy is
+// visible as such next to the Refresh button.
+function formatUpdatedAt(iso) {
+  if (!iso) return "unknown";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "unknown" : d.toLocaleString();
+}
+
 export async function renderAdminView(container) {
   const user = getCurrentUser();
   if (!user || !user.is_admin) {
@@ -362,32 +372,60 @@ export async function renderAdminView(container) {
     return;
   }
 
-  mount(container, el("h1", {}, "Admin"), el("p", { class: "empty-state" }, "Loading…"));
+  // Full re-render on each load -- the router already hands this view a
+  // fresh container per navigation, and Refresh just re-runs the same path
+  // with refresh=1 to bypass the backend metrics cache.
+  async function load(refresh) {
+    let flagsData;
+    let metricsData;
+    try {
+      [flagsData, metricsData] = await Promise.all([
+        getAdminFlags(),
+        getAdminMetrics({ refresh }),
+      ]);
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.status === 403
+          ? "You don't have access to this page."
+          : `Couldn't load the admin dashboard: ${err.message}`;
+      mount(
+        container,
+        el("h1", {}, "Admin"),
+        el("p", { class: "empty-state" }, message),
+        el("a", { href: "#/", class: "back-link" }, "← Back to search")
+      );
+      return;
+    }
 
-  let flagsData;
-  let metricsData;
-  try {
-    [flagsData, metricsData] = await Promise.all([getAdminFlags(), getAdminMetrics()]);
-  } catch (err) {
-    const message =
-      err instanceof ApiError && err.status === 403
-        ? "You don't have access to this page."
-        : `Couldn't load the admin dashboard: ${err.message}`;
+    const refreshBtn = el("button", { type: "button", class: "secondary" }, "Refresh");
+    refreshBtn.addEventListener("click", () => {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing…";
+      // load() re-mounts the whole container, replacing this button, so
+      // there's nothing to restore on completion.
+      load(true);
+    });
+
+    const flagsListEl = el("div", { class: "admin-flags-list" });
     mount(
       container,
-      el("h1", {}, "Admin"),
-      el("p", { class: "empty-state" }, message),
-      el("a", { href: "#/", class: "back-link" }, "← Back to search")
+      el(
+        "div",
+        { class: "admin-header" },
+        el("h1", {}, "Admin"),
+        el(
+          "div",
+          { class: "admin-header-actions" },
+          el("span", { class: "hint" }, `Metrics updated ${formatUpdatedAt(metricsData.generated_at)}`),
+          refreshBtn
+        )
+      ),
+      renderMetrics(metricsData),
+      el("div", { class: "card" }, el("h2", {}, "Flagged issues"), flagsListEl)
     );
-    return;
+    renderFlagsSection(flagsListEl, flagsData.flags);
   }
 
-  const flagsListEl = el("div", { class: "admin-flags-list" });
-  mount(
-    container,
-    el("h1", {}, "Admin"),
-    renderMetrics(metricsData),
-    el("div", { class: "card" }, el("h2", {}, "Flagged issues"), flagsListEl)
-  );
-  renderFlagsSection(flagsListEl, flagsData.flags);
+  mount(container, el("h1", {}, "Admin"), el("p", { class: "empty-state" }, "Loading…"));
+  await load(false);
 }

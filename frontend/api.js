@@ -222,8 +222,11 @@ export function setAdminFlagResolved(flagId, resolved) {
   return request(`/api/admin/flags/${flagId}/resolved`, { method: "PUT", body: { resolved } });
 }
 
-export function getAdminMetrics() {
-  return request("/api/admin/metrics");
+// refresh: true bypasses the backend's 15-min metrics cache and recomputes
+// (the "Refresh" button on the dashboard), matching ?refresh=1 on
+// GET /api/me/matches.
+export function getAdminMetrics({ refresh = false } = {}) {
+  return request(`/api/admin/metrics${toQueryString({ refresh: refresh ? 1 : "" })}`);
 }
 
 export function importResume(file) {
