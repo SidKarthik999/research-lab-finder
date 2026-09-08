@@ -11,6 +11,11 @@
 #     breaker that stops the run cleanly once OpenAlex's daily budget looks
 #     exhausted (see each module's __main__). A timeout kill just resumes
 #     next run.
+#     OpenAlex enforces ONE shared request budget for the whole pipeline and
+#     only refreshes it once per day. Publications runs first, so it's capped
+#     (PUBLICATIONS_MAX_PROFESSORS_PER_RUN below) to leave a share for the
+#     Topics step -- without the cap it spent the entire day's budget and
+#     topic coverage flatlined while publication coverage kept climbing.
 #   - enrich_names: get_professors_with_orcid() orders name_checked_at ASC
 #     NULLS FIRST, so never-checked professors go first; a resumed run keeps
 #     making forward progress. It re-checks done ones eventually, which is
@@ -66,6 +71,11 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Publications
+        # Cap professors per run so the Topics step below still has OpenAlex
+        # budget left (the two share one daily quota). ~half of the observed
+        # ~10k/day ceiling; tune if the ceiling moves.
+        env:
+          PUBLICATIONS_MAX_PROFESSORS_PER_RUN: "5000"
         run: python -m src.ingestion.publications
 
       - name: Topics

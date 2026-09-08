@@ -11,6 +11,7 @@ was queried for it.
 Run from the repo root: python -m src.ingestion.publications
 """
 
+import os
 import re
 
 import pyalex
@@ -105,7 +106,7 @@ def ingest_publications_for_professor(professor_id, openalex_author_id, limit=10
     return inserted
 
 
-def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
+def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5, max_professors=None):
     """Only pulls professors with zero ProfessorPublication rows so far --
     each professor here costs one paid, filtered-list OpenAlex request (not
     a free single-record view), so a resumed/rerun call must not re-spend
@@ -129,12 +130,22 @@ def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
     A real success anywhere resets the counter, so an isolated one-off
     failure (a single professor's data issue, not sustained throttling)
     doesn't prematurely abort a run that still has budget left.
+
+    max_professors, if set, stops the run after that many professors have
+    been attempted (success or failure), leaving the rest for a later run.
+    OpenAlex enforces one shared daily request budget that this module and
+    topics.py both draw on, and it only refreshes once per day. This module
+    runs first in .github/workflows/enrich.yml, so without a cap here it
+    spends the whole day's budget and topics.py -- which runs straight
+    after -- gets nothing (topic coverage flatlined this way while
+    publication coverage kept climbing). Capping it leaves a share for
+    topics.py every run.
     """
     professors = get_professors_without_publications()
     total = 0
     consecutive_failures = 0
 
-    for professor_id, name, openalex_id in professors:
+    for professors_attempted, (professor_id, name, openalex_id) in enumerate(professors, start=1):
         try:
             count = ingest_publications_for_professor(professor_id, openalex_id, limit=limit_per_professor)
             print(f"{name}: {count} publication(s)")
@@ -159,6 +170,14 @@ def ingest_all_publications(limit_per_professor=10, max_consecutive_failures=5):
                 )
                 break
 
+        if max_professors is not None and professors_attempted >= max_professors:
+            print(
+                f"Reached the per-run cap of {max_professors} professors -- stopping "
+                "so topics.py gets a share of today's OpenAlex budget. Re-run to "
+                "continue where this left off."
+            )
+            break
+
     return total
 
 
@@ -168,7 +187,12 @@ if __name__ == "__main__":
     # first get_connection() call (inside ingest_all_publications())
     # lazily creates the pool with the default instead.
     init_pool(timeout=90)
-    total = ingest_all_publications()
+    # Per-run professor cap (see ingest_all_publications' docstring): keeps
+    # this module from spending the whole shared daily OpenAlex budget before
+    # topics.py runs. Unset -> no cap (local one-off runs).
+    max_professors = os.getenv("PUBLICATIONS_MAX_PROFESSORS_PER_RUN")
+    total = ingest_all_publications(
+        max_professors=int(max_professors) if max_professors else None
+    )
     print(f"Inserted {total} publication(s)")
-    close_connection()
     close_connection()
