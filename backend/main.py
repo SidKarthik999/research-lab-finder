@@ -15,6 +15,7 @@ Run from the repo root: uvicorn backend.main:app --reload
 
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -783,15 +784,40 @@ def admin_set_flag_resolved(flag_id: int, payload: ProfessorFlagResolveRequest, 
     return {"resolved_at": resolved_at}
 
 
+# db.get_data_coverage_metrics() is a full-catalog aggregate -- it scans all
+# ~196k Professor rows with semi-joins against ProfessorPublication/
+# ProfessorTopic and a COUNT(*) over the ~520k-row Publication table -- and
+# the dashboard re-requests it on every open. Those numbers only move when
+# the daily enrichment batch runs, so a short-lived cached copy is fine and
+# keeps each visit from re-running that scan (which, plus Neon cold-start,
+# was making the page take seconds to load). In-process, single slot: this
+# app runs one Render instance (same assumption as backend/rate_limit.py),
+# and a restart just repopulates on the next request. ?refresh=1 bypasses
+# it, mirroring GET /api/me/matches.
+_ADMIN_METRICS_CACHE_TTL_SECONDS = 15 * 60
+_admin_metrics_cache = {"value": None, "fetched_at": 0.0}
+
+
 @app.get("/api/admin/metrics")
 @db.with_connection
-def admin_metrics(admin=Depends(require_admin)):
-    return {
+def admin_metrics(admin=Depends(require_admin), refresh: bool = Query(False)):
+    now = time.monotonic()
+    if (
+        not refresh
+        and _admin_metrics_cache["value"] is not None
+        and now - _admin_metrics_cache["fetched_at"] < _ADMIN_METRICS_CACHE_TTL_SECONDS
+    ):
+        return _admin_metrics_cache["value"]
+
+    metrics = {
         "signups": db.get_signup_metrics(),
         "ai_usage": db.get_ai_usage_metrics(),
         "bookmarks": db.get_bookmark_metrics(),
         "data_coverage": db.get_data_coverage_metrics(),
     }
+    _admin_metrics_cache["value"] = metrics
+    _admin_metrics_cache["fetched_at"] = now
+    return metrics
 
 
 @app.post("/api/professors/{professor_id}/summary")
